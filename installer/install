@@ -1,0 +1,135 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+IFS=$'\t\n'
+
+function err() {
+	echo "[31merror[0m: $*" >/dev/stderr
+}
+
+function warn() {
+	echo "[33mwarn[0m: $*" >/dev/stderr
+}
+
+function log() {
+	echo "[36minfo[0m: $*" >/dev/stderr
+}
+
+function debug() {
+	echo "[34mdebug[0m: $*" >/dev/stderr
+}
+
+function dbg() {
+	debug "$@"
+}
+
+function abort() {
+	(( $# > 0 )) &&
+		err "$@"
+	exit 1
+}
+
+function prompt() {
+	echo -n "[1;35m==> [0m$* " >/dev/stderr
+}
+
+function pick() {
+	local default
+
+	for option in "$@"; do
+		[[ ${#option} != 1 ]] && abort "pick: $option is not a single letter"
+		[[ ${option,,} != "$option" ]] && default=${option,,}
+	done
+
+	local in
+	read -rn 1 in
+	in=${in,,}
+
+	for option in "$@"; do
+		[[ $in == "$option" ]] && {
+			echo -n "$option";
+			return;
+		}
+	done
+
+	echo -n "$default"
+}
+
+if [[ $(id -u) -ne 0 ]]; then
+	exec sudo "${BASH_SOURCE[0]}" || exit 1
+fi
+
+function print_devices() {
+	found=()
+	while read -rd $'\0' path; do
+		found+=("$path")
+	done < <(find /dev/ -regex "$2" -print0)
+
+	if [[ ${#found[@]} -gt 0 ]]; then
+		IFS=' '
+		log "$1: ${found[*]}"
+		IFS=$'\t\n'
+	fi
+}
+
+log "Available devices:"
+print_devices "sd" "/dev/sd[a-Z]+"
+print_devices "vd" "/dev/vd[a-Z]+"
+# TODO: Support NVME, note that this requries adjusting the parted commands below
+# print_devices "nvme" "/dev/nvme[0-9]+n[0-9]+"
+
+while true; do
+	prompt "Installation device path:"
+	read -r install_device
+
+	if [[ -b $install_device ]]; then
+		break
+	else
+		err "$install_device is not a block device"
+	fi
+done
+
+log "Formatting device"
+
+parted -s "$install_device" -- mklabel msdos
+parted -s "$install_device" -- mkpart primary ext4 1MiB 32GiB
+mkfs.ext4 -q -L talentnix-root "${install_device}1"
+parted -s "$install_device" -- mkpart primary linux-swap 32GiB 40GiB
+mkswap -q -L talentnix-swap "${install_device}2"
+parted -s "$install_device" -- mkpart primary ext4 40GiB 64GiB
+mkfs.ext4 -q -L talentnix-home "${install_device}3"
+
+log "Generating default configuration"
+
+prompt "Hostname:"
+# shellcheck disable=2034
+read -r hostname
+
+mkdir /tmp/installer
+cd /tmp/installer
+
+mount -o noatime "${install_device}1" /mnt
+swapon "${install_device}2"
+mount -o noatime -m "${install_device}3" /mnt/home
+
+mkdir -p /mnt/etc
+
+cp --no-preserve=all -r "@template@" /mnt/etc/nixos
+sed -i "s,@hostname@,$hostname,g" /mnt/etc/nixos/flake.nix
+sed -i "s,@install_device@,$install_device,g" /mnt/etc/nixos/flake.nix
+sed -i "s,@_stateVersion@,@stateVersion@,g" /mnt/etc/nixos/flake.nix
+
+nixos-generate-config --root /mnt --show-hardware-config > /mnt/etc/nixos/hardware-configuration.nix
+
+prompt "Always clear user home? [y/N]"
+[[ $(pick Y n) == y ]] &&
+	touch /mnt/etc/clear_home_always
+echo
+
+# Copy this repository to the target's nix store and override the talentnix input so that installation can be performed without having access to this repository.
+nix copy --no-require-sigs --to /mnt @this@ @nixpkgs@ @partialSystem@
+(cd /mnt/etc/nixos; nix flake lock --override-input talentnix @this@ --override-input nixpkgs @nixpkgs@)
+
+nixos-install --no-channel-copy --flake /mnt/etc/nixos#"$hostname"
+
+reboot
