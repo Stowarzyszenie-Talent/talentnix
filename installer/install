@@ -73,6 +73,8 @@ function print_devices() {
 }
 
 log "Available devices:"
+lsblk -d -o NAME,SIZE
+echo
 print_devices "sd" "/dev/sd[a-Z]+"
 print_devices "vd" "/dev/vd[a-Z]+"
 # TODO: Support NVME, note that this requries adjusting the parted commands below
@@ -88,6 +90,10 @@ while true; do
 		err "$install_device is not a block device"
 	fi
 done
+
+log "Unmounting partitions"
+umount -Rq /mnt || true
+swapoff -a
 
 log "Formatting device"
 
@@ -105,6 +111,7 @@ prompt "Hostname:"
 # shellcheck disable=2034
 read -r hostname
 
+rm -rf /tmp/installer
 mkdir /tmp/installer
 cd /tmp/installer
 
@@ -127,8 +134,14 @@ prompt "Always clear user home? [y/N]"
 echo
 
 # Copy this repository to the target's nix store and override the talentnix input so that installation can be performed without having access to this repository.
-nix copy --no-require-sigs --to /mnt @this@ @nixpkgs@ @partialSystem@
-(cd /mnt/etc/nixos; nix flake lock --override-input talentnix @this@ --override-input nixpkgs @nixpkgs@)
+nix copy --no-require-sigs --to /mnt @this@ @nixpkgs@ @hm@ @partialSystem@
+(
+    cd /mnt/etc/nixos;
+    nix flake lock --offline --no-use-registries \
+        --override-input talentnix @this@ \
+        --override-input nixpkgs @nixpkgs@ \
+        --override-input home-manager @hm@
+)
 
 nixos-install --no-channel-copy --flake /mnt/etc/nixos#"$hostname"
 

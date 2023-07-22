@@ -1,4 +1,4 @@
-{ config, pkgs, lib, modulesPath, nixpkgs, talentnix, ... }:
+{ config, pkgs, lib, modulesPath, nixpkgs, talentnix, home-manager, ... }:
 
 let
   partialSystem =
@@ -8,6 +8,7 @@ let
         talentnix.nixosModules.default
         {
           boot.loader.grub.devices = [ "/driveless-shelter" ];
+          environment.systemPackages = with pkgs; [ grub2 ];
           fileSystems."/" = { device = "/driveless-shelter"; fsType = "ext4"; };
           system.stateVersion = config.system.nixos.release;
         }
@@ -57,6 +58,7 @@ in
             template = ./template;
             this = ./..;
             inherit nixpkgs partialSystem;
+            hm = home-manager;
             stateVersion = config.system.nixos.release;
           };
           nativeBuildInputs = with pkgs; [ makeWrapper ];

@@ -4,6 +4,10 @@
     url = "github:Stowarzyszenie-Talent/talentnix";
     inputs.nixpkgs.follows = "nixpkgs";
   };
+  inputs.home-manager = {
+    url = "github:nix-community/home-namager";
+    inputs.nixpkgs.follows = "nixpkgs";
+  };
 
   outputs = { self, nixpkgs, home-manager, talentnix, ... }: {
     nixosConfigurations."@hostname@" = nixpkgs.lib.nixosSystem {

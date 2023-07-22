@@ -21,7 +21,7 @@
     nixosConfigurations.installer-x86_64-linux = nixpkgs.lib.nixosSystem {
       system = "x86_64-linux";
       specialArgs = {
-        inherit nixpkgs;
+        inherit nixpkgs home-manager;
         talentnix = self;
       };
       modules = [
