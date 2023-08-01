@@ -22,6 +22,10 @@
             url = "https://oboz.talent.edu.pl";
           }
           {
+            name = "Dokumentacja języka C++";
+            url = "file:///${pkgs.cppreference-doc}/share/cppreference/doc/html/en/Main_Page.html";
+          }
+          {
             name = "Wyzwania";
             url = "https://wyzwania.programuj.edu.pl";
           }
