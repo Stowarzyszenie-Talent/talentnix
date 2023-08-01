@@ -36,4 +36,4 @@ Otherwise:
 
 1. Get an internet connection on the talentop
 2. `su` to root and `cd /etc/nixos`
-3. Run `nix flake update` and `nixos-rebuild switch`
+3. Run `nix flake lock --update-input talentnix` and `nixos-rebuild switch`
