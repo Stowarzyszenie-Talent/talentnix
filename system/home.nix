@@ -56,6 +56,11 @@
       "Net/ThemeName" = "Arc-Dark";
       "Net/IconThemeName" = "Arc";
     };
+    xfce4-power-manager = {
+      "xfce4-power-manager/lock-screen-suspend-hibernate" = false;
+      "xfce4-power-manager/lid-action-on-ac" = 1;
+      "xfce4-power-manager/lid-action-on-battery" = 1;
+    };
     xfce4-desktop = builtins.listToAttrs (
       builtins.map
         (x: {
