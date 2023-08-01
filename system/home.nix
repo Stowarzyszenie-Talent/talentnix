@@ -18,11 +18,11 @@
         toolbar = true;
         bookmarks = [
           {
-            name = "Obozowe SIO2 - oboz.talent.edu.pl";
+            name = "Obozowe SIO2";
             url = "https://oboz.talent.edu.pl";
           }
           {
-            name = "Dokumentacja języka C++";
+            name = "Dokumentacja C++";
             url = "file:///${pkgs.cppreference-doc}/share/cppreference/doc/html/en/Main_Page.html";
           }
           {
