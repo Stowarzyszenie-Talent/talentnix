@@ -53,7 +53,6 @@
     xserver = {
       enable = true;
       layout = "pl";
-      excludePackages = [ pkgs.xterm ];
       desktopManager.xfce.enable = true;
       displayManager.autoLogin.user = "user";
       xautolock.enable = false;
