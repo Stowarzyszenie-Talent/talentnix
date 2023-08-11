@@ -24,28 +24,31 @@
     extraGroups = [ "networkmanager" ];
   };
 
-  environment.systemPackages = with pkgs; [
-    htop
-    iotop
-    hdparm
-    zsh
-    exa
-    fzf
-    libarchive
-    gnome.gnome-calculator
-    firefox
-    codeblocks
-    emacs
-    geany
-    nano
-    neovim
-    xfce.mousepad
-    vim-full
-    git
-    glibc.static
-    gcc
-    gdb
-    valgrind
+  environment.systemPackages = with pkgs;
+  let
+    update = writers.writeBashBin "update" ''
+      set -euo
+      if [[ $(id -u) -ne 0 ]]; then
+        exec su -c "''${BASH_SOURCE[0]}" || exit 1
+      fi
+      cd /etc/nixos
+      nix flake lock --update-input talentnix
+      nixos-rebuild switch
+    '';
+  in
+  [
+    # our own stuff
+    update
+    # monitoring stuff
+    htop iotop hdparm
+    # utils
+    zsh exa fzf ripgrep libarchive curl wget
+    # ides and text editors
+    codeblocks emacs geany nano neovim xfce.mousepad vim-full
+    # other dev stuff
+    glibc.static gcc gdb valgrind git
+    # calculators
+    python3 bc gnome.gnome-calculator
   ];
 
   services = {
