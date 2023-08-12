@@ -76,5 +76,8 @@ in
       installer
     ];
 
+  # Needed for eebfe989a5dc3aac622b9b5f2edef4461d8968c1,
+  # which fixes our offline installation.
+  nix.package = pkgs.nixVersions.nix_2_17;
   nix.settings.experimental-features = [ "nix-command" "flakes" ];
 }

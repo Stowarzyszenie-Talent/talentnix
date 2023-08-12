@@ -134,7 +134,7 @@ prompt "Always clear user home? [y/N]"
 echo
 
 # Copy this repository to the target's nix store and override the talentnix input so that installation can be performed without having access to this repository.
-nix copy --no-require-sigs --to /mnt @this@ @nixpkgs@ @hm@ @partialSystem@
+nix copy --offline --no-require-sigs --to /mnt @this@ @nixpkgs@ @hm@ @partialSystem@
 (
     cd /mnt/etc/nixos;
     nix flake lock --offline --no-use-registries \
