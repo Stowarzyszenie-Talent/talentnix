@@ -1,4 +1,4 @@
-{ config, pkgs, lib, modulesPath, nixpkgs, talentnix, home-manager, ... }:
+{ system, config, pkgs, lib, modulesPath, nixpkgs, talentnix, home-manager, ... }:
 
 let
   partialSystem =
@@ -13,20 +13,37 @@ let
           system.stateVersion = config.system.nixos.release;
         }
       ];
-    }).config.system.build.toplevel;
+    });#.config.system.build.toplevel;
+  tarballs = lib.getTarballs {
+    root = [ partialSystem.config.system.build.toplevel partialSystem.config.environment.systemPackages ];
+    includeUnzipped=true;
+    includeBusybox=true;
+  };
+  tarballsList = pkgs.writeText "tarballs-list" (builtins.concatStringsSep "\n" tarballs);
 in
 {
   imports = [
     (modulesPath + "/installer/cd-dvd/installation-cd-minimal.nix")
+    (import ./nixos-installer-gen/tarballServer.nix {
+      inherit system nixpkgs;
+      includeBusybox=true;
+      config = partialSystem.config;
+    })
+    (import ./nixos-installer-gen/genSymlinks.nix {
+      inherit tarballs lib;
+    })
   ];
 
+  system.extraDependencies = [ tarballsList ];
   system.nixos.distroName = "TalentNix";
   system.nixos.distroId = "talentnix";
   isoImage.isoBaseName = "talentnix-installer";
   isoImage.squashfsCompression = "zstd -Xcompression-level 9";
 
   # This sets up the nix store on the iso to contain most of the packages required for installation so that one can be performed without an internet connection (although this may not always hold true)
-  isoImage.storeContents = [ partialSystem ];
+  isoImage.storeContents = [ partialSystem.config.system.build.toplevel ];
+
+  # Serve the rest like https://tarballs.nixos.org or sth
 
   programs.neovim.enable = true;
 
@@ -57,7 +74,8 @@ in
             src = ./install;
             template = ./template;
             this = ./..;
-            inherit nixpkgs partialSystem;
+            inherit nixpkgs;
+            partialSystem = partialSystem.config.system.build.toplevel;
             hm = home-manager;
             stateVersion = config.system.nixos.release;
           };
