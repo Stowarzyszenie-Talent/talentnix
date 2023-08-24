@@ -14,20 +14,22 @@ let
         }
       ];
     });#.config.system.build.toplevel;
-  tarballs = lib.getTarballs {
+  getTarballs = import ./nixos-installer-gen/getTarballs.nix;
+  tarballs = getTarballs lib {
     root = [ partialSystem.config.system.build.toplevel partialSystem.config.environment.systemPackages ];
     includeUnzipped=true;
     includeBusybox=true;
   };
-  tarballsList = pkgs.writeText "tarballs-list" (builtins.concatStringsSep "\n" tarballs);
+  tarballsList = pkgs.writeText "tarballs-list" (builtins.concatStringsSep "\n" tarballs );
 in
 {
   imports = [
     (modulesPath + "/installer/cd-dvd/installation-cd-minimal.nix")
     (import ./nixos-installer-gen/tarballServer.nix {
-      inherit system nixpkgs;
+      inherit nixpkgs config pkgs;
+      system="x86_64-linux";
       includeBusybox=true;
-      config = partialSystem.config;
+      #config = partialSystem.config;
     })
     (import ./nixos-installer-gen/genSymlinks.nix {
       inherit tarballs lib;
@@ -41,7 +43,18 @@ in
   isoImage.squashfsCompression = "zstd -Xcompression-level 9";
 
   # This sets up the nix store on the iso to contain most of the packages required for installation so that one can be performed without an internet connection (although this may not always hold true)
-  isoImage.storeContents = [ partialSystem.config.system.build.toplevel ];
+  isoImage.storeContents = let
+    rev = "63acb96f92473ceb5e21d873d7c0aee266b3d6d3";
+    configGuess = pkgs.fetchurl {
+      url = "https://git.savannah.gnu.org/cgit/config.git/plain/config.guess?id=${rev}";
+      sha256 = "049qgfh4xjd4fxd7ygm1phd5faqphfvhfcv8dsdldprsp86lf55v";
+    };
+    configSub = pkgs.fetchurl {
+      url = "https://git.savannah.gnu.org/cgit/config.git/plain/config.sub?id=${rev}";
+      sha256 = "1rk30y27mzls49wyfdb5jhzjr08hkxl7xqhnxmhcmkvqlmpsjnxl";
+    };
+  in
+  [ partialSystem.config.system.build.toplevel pkgs.nix configGuess configSub ];
 
   # Serve the rest like https://tarballs.nixos.org or sth
 
@@ -66,7 +79,7 @@ in
         coreutils
         findutils
         parted
-        stdenvNoCC
+        stdenv
       ];
       installer = pkgs.runCommand "talentnix-installer"
         {
@@ -92,6 +105,7 @@ in
       git
       htop
       installer
+      stdenv
     ];
 
   # Needed for eebfe989a5dc3aac622b9b5f2edef4461d8968c1,

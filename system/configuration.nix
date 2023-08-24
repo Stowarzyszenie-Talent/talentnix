@@ -39,6 +39,8 @@
   [
     # our own stuff
     update
+    # HACK
+    gnu-config stdenv
     # monitoring stuff
     htop iotop hdparm
     # utils
