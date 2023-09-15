@@ -72,13 +72,20 @@
   ];
 
   services = {
-    openssh.enable = true;
     xserver = {
       enable = true;
       layout = "pl";
       desktopManager.xfce.enable = true;
       displayManager.autoLogin.user = "user";
       xautolock.enable = false;
+    };
+    tlp = {
+      enable = true;
+      settings = {
+        DISK_SPINDOWN_TIMEOUT_ON_AC = "0 0";
+        DISK_SPINDOWN_TIMEOUT_ON_BAT = "0 0";
+        #DISK_APM_LEVEL_ON_BAT = "254 254";
+      };
     };
   };
 
