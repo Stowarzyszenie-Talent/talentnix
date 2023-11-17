@@ -18,6 +18,7 @@
           networking.hostName = "@hostname@";
           boot.loader.grub.devices = [ "@install_device@" ];
           system.stateVersion = "@_stateVersion@";
+          talent.wifiLock = "@wifiLock@";
         }
         talentnix.nixosModules.default
       ];

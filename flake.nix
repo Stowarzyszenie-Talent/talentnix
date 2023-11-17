@@ -11,16 +11,12 @@
   };
 
   outputs = { self, nixpkgs, home-manager, ... }: {
-    nixosModules.default = { config, pkgs, ... }: {
+    nixosModules.default = {
       imports = [
         home-manager.nixosModules.home-manager
-
-        {
-          home-manager.useGlobalPkgs = true;
-          home-manager.users.user = import ./system/home.nix;
-        }
-
+        ./system/options.nix
         ./system/configuration.nix
+        ./system/home.nix
       ];
     };
     nixosConfigurations.installer-x86_64-linux = nixpkgs.lib.nixosSystem {

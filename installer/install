@@ -111,6 +111,9 @@ prompt "Hostname:"
 # shellcheck disable=2034
 read -r hostname
 
+prompt "Wifi SSID to lock to (or blank for no lock):"
+read -r wifiLock
+
 rm -rf /tmp/installer
 mkdir /tmp/installer
 cd /tmp/installer
@@ -123,6 +126,7 @@ mkdir -p /mnt/etc
 
 cp --no-preserve=all -r "@template@" /mnt/etc/nixos
 sed -i "s,@hostname@,$hostname,g" /mnt/etc/nixos/flake.nix
+sed -i "s,@wifiLock@,$wifiLock,g" /mnt/etc/nixos/flake.nix
 sed -i "s,@install_device@,$install_device,g" /mnt/etc/nixos/flake.nix
 sed -i "s,@_stateVersion@,@stateVersion@,g" /mnt/etc/nixos/flake.nix
 

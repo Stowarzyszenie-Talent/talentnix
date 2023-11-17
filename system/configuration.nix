@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ pkgs, lib, config, ... }:
 
 {
   # Silent boot
@@ -16,7 +16,18 @@
   nix.settings.experimental-features = [ "nix-command" "flakes" ];
 
   time.timeZone = "Europe/Warsaw";
-  networking.networkmanager.enable = true;
+
+  networking.networkmanager.enable = config.talent.wifiLock == "";
+  networking.wireless = lib.mkIf (config.talent.wifiLock != "") {
+    enable = true;
+    # Currently broken, see https://github.com/NixOS/nixpkgs/issues/157537
+    #allowAuxiliaryImperativeNetworks = true;
+    networks = {
+      "${config.talent.wifiLock}" = {
+        psk = "1234567890";
+      };
+    };
+  };
 
   users.users.user = {
     isNormalUser = true;
@@ -43,6 +54,20 @@
           exit 3
         fi
       fi
+      if [[ "$1" == "wifiLock" ]]; then
+        if [[ $(id -u) -ne 0 ]]; then
+            exec su -c "''${BASH_SOURCE[0]} $@" || exit 1
+        fi
+        val='"'"''${2:-}"'"'
+        if [[ "$val" == '""' ]]; then
+            echo -e "Removing the wifi lock\n"
+        else
+            echo -e "Setting the wifi lock to $val\n"
+        fi
+        sed -i "s/talent.wifiLock =.*$/talent.wifiLock = ''${val};/" /etc/nixos/flake.nix
+        nixos-rebuild switch
+        exit 0
+      fi
       if [[ "$1" == "update" ]]; then
         if [[ $(id -u) -ne 0 ]]; then
             exec su -c "''${BASH_SOURCE[0]} $@" || exit 1
@@ -52,8 +77,8 @@
         nixos-rebuild switch
         exit 0
       fi
-      echo -e "Usage:\n   talentctl <subcommand>\n"
-      echo -e "Available subcommands:\n - update\n - clear\n - cancel_clear"
+      echo -e "Usage:\n   talentctl <subcommand> ...\n"
+      echo -e "Available subcommands:\n - update\n - clear\n - cancel_clear\n - wifiLock [SSID]\n"
     '';
   in
   [
