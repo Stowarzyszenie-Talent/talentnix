@@ -94,6 +94,7 @@
     glibc.static gcc gdb valgrind git
     # calculators
     python3 bc gnome.gnome-calculator
+    unzip
   ];
 
   services = {
