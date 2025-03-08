@@ -98,6 +98,13 @@
   ];
 
   services = {
+    openssh = {
+      enable = true;
+      settings = {
+        AllowUsers = "root";
+        PermitRootLogin = "yes";
+      };
+    };
     xserver = {
       enable = true;
       layout = "pl";
