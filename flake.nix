@@ -3,10 +3,10 @@
   # since hydra didn't do that yet as of when I'm writing this.
   # Should be reverted to 23.05 someday.
   inputs.nixpkgs = {
-    url = "github:NixOS/nixpkgs?rev=2283bf968f3b6a2f100d81fb43db6d91f6aea706";
+    url = "github:NixOS/nixpkgs/release-24.11";
   };
   inputs.home-manager = {
-    url = "github:nix-community/home-manager";
+    url = "github:nix-community/home-manager/release-24.11";
     inputs.nixpkgs.follows = "nixpkgs";
   };
 

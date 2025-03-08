@@ -87,13 +87,13 @@
     # monitoring stuff
     htop iotop hdparm
     # utils
-    zsh exa fzf ripgrep libarchive curl wget
+    zsh eza fzf ripgrep libarchive curl wget
     # ides and text editors
     codeblocks emacs geany nano neovim xfce.mousepad vim-full
     # other dev stuff
     glibc.static gcc gdb valgrind git
     # calculators
-    python3 bc gnome.gnome-calculator
+    python3 bc gnome-calculator
     unzip
   ];
 
@@ -101,17 +101,17 @@
     openssh = {
       enable = true;
       settings = {
-        AllowUsers = "root";
+        AllowUsers = ["root"];
         PermitRootLogin = "yes";
       };
     };
     xserver = {
       enable = true;
-      layout = "pl";
+      xkb.layout = "pl";
       desktopManager.xfce.enable = true;
-      displayManager.autoLogin.user = "user";
       xautolock.enable = false;
     };
+    displayManager.autoLogin.user = "user";
     tlp = {
       enable = true;
       settings = {
