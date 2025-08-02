@@ -1,5 +1,5 @@
 {
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/release-24.11";
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/release-25.05";
   inputs.talentnix = {
     url = "github:Stowarzyszenie-Talent/talentnix";
     inputs.nixpkgs.follows = "nixpkgs";

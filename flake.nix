@@ -1,12 +1,9 @@
 {
-  # This is a specific hash in 23.05 to avoid building stuff like firefox,
-  # since hydra didn't do that yet as of when I'm writing this.
-  # Should be reverted to 23.05 someday.
   inputs.nixpkgs = {
-    url = "github:NixOS/nixpkgs/release-24.11";
+    url = "github:NixOS/nixpkgs/release-25.05";
   };
   inputs.home-manager = {
-    url = "github:nix-community/home-manager/release-24.11";
+    url = "github:nix-community/home-manager/release-25.05";
     inputs.nixpkgs.follows = "nixpkgs";
   };
 

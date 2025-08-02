@@ -22,7 +22,7 @@ in
 
   system.nixos.distroName = "TalentNix";
   system.nixos.distroId = "talentnix";
-  isoImage.isoBaseName = "talentnix-installer";
+  isoImage.isoBaseName = lib.mkForce "talentnix-installer";
   isoImage.squashfsCompression = "zstd -Xcompression-level 9";
 
   # This sets up the nix store on the iso to contain most of the packages required for installation so that one can be performed without an internet connection (although this may not always hold true)

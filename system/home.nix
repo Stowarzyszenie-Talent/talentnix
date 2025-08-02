@@ -17,7 +17,9 @@
       profiles.default = {
         id = 0;
         name = "Talentnix firefox profile";
-        bookmarks = [{
+        # This will delete all previous bookmarks. Unfortunate.
+        bookmarks.force = true;
+        bookmarks.settings = [{
           toolbar = true;
           bookmarks = [
             {
@@ -31,7 +33,7 @@
           ];
         }];
         search = {
-          default = "DuckDuckGo";
+          default = "ddg";
           force = true;
         };
       };
@@ -72,6 +74,6 @@
           }) [ "LVDS" "HDMI" "DP" "eDP" "Virtual" ]);
     };
 
-    home.stateVersion = "24.11";
+    home.stateVersion = "25.05";
   };
 }
