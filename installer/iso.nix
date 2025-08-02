@@ -18,15 +18,18 @@ in
 {
   imports = [
     (modulesPath + "/installer/cd-dvd/installation-cd-minimal.nix")
+    (modulesPath + "/installer/netboot/netboot-minimal.nix")
   ];
 
   system.nixos.distroName = "TalentNix";
   system.nixos.distroId = "talentnix";
   isoImage.isoBaseName = lib.mkForce "talentnix-installer";
   isoImage.squashfsCompression = "zstd -Xcompression-level 9";
+  netboot.squashfsCompression = "zstd -Xcompression-level 9";
 
   # This sets up the nix store on the iso to contain most of the packages required for installation so that one can be performed without an internet connection (although this may not always hold true)
   isoImage.storeContents = [ partialSystem ];
+  netboot.storeContents = [ partialSystem ];
 
   programs.neovim.enable = true;
 
