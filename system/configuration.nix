@@ -44,6 +44,22 @@
         echo "A clear was scheduled, it will happen on the next boot."
         exit 0
       fi
+      if [[ "$1" == "persist" ]]; then
+        if [[ $(id -u) -ne 0 ]]; then
+            exec su -c "''${BASH_SOURCE[0]} $@" || exit 1
+        fi
+        rm -f /etc/clear_home_always
+        echo "The home folder will persist across reboots."
+        exit 0
+      fi
+      if [[ "$1" == "nopersist" ]]; then
+        if [[ $(id -u) -ne 0 ]]; then
+            exec su -c "''${BASH_SOURCE[0]} $@" || exit 1
+        fi
+        touch /etc/clear_home_always
+        echo "The home folder WILL BE CLEARED on every boot."
+        exit 0
+      fi
       if [[ "$1" == "cancel_clear" ]]; then
         if [[ -e /home/user/clear_home ]]; then
           rm /home/user/clear_home || exit 2
