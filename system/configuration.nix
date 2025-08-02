@@ -101,7 +101,7 @@
     # our own stuff
     update
     # monitoring stuff
-    htop iotop hdparm
+    htop iotop hdparm smartmontools
     # utils
     zsh eza fzf ripgrep libarchive curl wget
     # ides and text editors
