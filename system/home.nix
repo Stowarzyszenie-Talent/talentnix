@@ -67,7 +67,7 @@
         "code-runner.runInTerminal" = true;
         "code-runner.saveAllFilesBeforeRun" = true;
         "code-runner.executorMap" = {
-          "cpp" = "g++ -std=c++23 -Wall -Wextra -O3 -g $fileName -o $fileNameWithoutExt && ./$fileNameWithoutExt";
+          "cpp" = "g++ -std=c++23 -Wall -Wextra -O2 -g $fileName -o $fileNameWithoutExt && ./$fileNameWithoutExt";
         };
       };
     };
