@@ -42,11 +42,11 @@
     # Nowe laptopy nie beda sie gotowaly z VSC
     programs.vscode = {
       enable = true;
-      extensions = with pkgs.vscode-extensions; [
+      profiles.default.extensions = with pkgs.vscode-extensions; [
         ms-vscode.cpptools
         formulahendry.code-runner
       ];
-      userSettings = {
+      profiles.default.userSettings = {
         "workbench.startupEditor" = "none";
         "workbench.tips.enabled" = false;
         "telemetry.telemetryLevel" = "off";
