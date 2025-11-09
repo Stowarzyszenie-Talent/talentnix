@@ -113,6 +113,9 @@
     unzip
   ];
 
+  # Allow unfree packages
+  nixpkgs.config.allowUnfree = true;
+
   services = {
     openssh = {
       enable = true;

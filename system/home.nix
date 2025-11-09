@@ -39,6 +39,39 @@
       };
     };
 
+    # Nowe laptopy nie beda sie gotowaly z VSC
+    programs.vscode = {
+      enable = true;
+      extensions = with pkgs.vscode-extensions; [
+        ms-vscode.cpptools
+        formulahendry.code-runner
+      ];
+      userSettings = {
+        "workbench.startupEditor" = "none";
+        "workbench.tips.enabled" = false;
+        "telemetry.telemetryLevel" = "off";
+        "jupyter.enabled" = false;
+        "files.defaultLanguage" = "cpp";
+        "update.mode" = "none";
+        "update.enableWindowsBackgroundUpdates" = false;
+        "update.showReleaseNotes" = false;
+        "extensions.autoUpdate" = false;
+        "extensions.autoCheckUpdates" = false;
+        "extensions.ignoreRecommendations" = true;
+
+        "github.copilot.enable" = false;
+
+        "C_Cpp.default.cppStandard" = "c++23";
+        "C_Cpp.default.cStandard" = "c17";
+
+        "code-runner.runInTerminal" = true;
+        "code-runner.saveAllFilesBeforeRun" = true;
+        "code-runner.executorMap" = {
+          "cpp" = "g++ -std=c++23 -Wall -Wextra -O3 -g $fileName -o $fileNameWithoutExt && ./$fileNameWithoutExt";
+        };
+      };
+    };
+
     # To nie działa do końca, bo potrza xfconf poniżej. Można zastąpić package'ami
     gtk = {
       enable = true;
