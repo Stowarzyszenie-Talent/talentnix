@@ -8,7 +8,7 @@
   let
     oiapp = pkgs.fetchurl {
       url = "https://kuraczyk.net/sio2qr";
-      sha256 = "sha256-b7298bf1d10b82d59e035a2852843bfdb20ebefc01532814914cdea94871a62e";
+      sha256 = "sha256-tymL8dELgtWeA1ooUoQ7/bIOvvwBUygUkUzeqUhxpi4=";
     };
     sio2qr = pkgs.runCommand "sio2qr" {} ''
       cp ${oiapp} $out
@@ -24,9 +24,10 @@
     '';
 
     # alias zamiast sciezki do executable
-    programs.bash.initExtra = ''
-      alias sio2qr="${sio2qr}"
-    '';
+    programs.bash.enable = true;
+    programs.bash.shellAliases = {
+      sio2qr = "${sio2qr}";
+    };
 
     services.network-manager-applet.enable = config.talent.wifiLock == "";
     programs.firefox = {
