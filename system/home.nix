@@ -16,19 +16,15 @@
       enable = true;
       profiles.default = {
         id = 0;
-        name = "Talentnix firefox profile";
+        name = "Talentnix OI firefox profile";
         # This will delete all previous bookmarks. Unfortunate.
         bookmarks.force = true;
         bookmarks.settings = [{
           toolbar = true;
           bookmarks = [
             {
-              name = "Obozowe SIO2";
-              url = "https://oboz.talent.edu.pl";
-            }
-            {
-              name = "Wyzwania";
-              url = "https://wyzwania.programuj.edu.pl";
+              name = "SIO2 - Olimpiada Informatyczna";
+              url = "https://sio2.mimuw.edu.pl";
             }
           ];
         }];
@@ -38,6 +34,23 @@
         };
       };
     };
+
+    # Dorzucamy aplikacje oi do offline submitow
+    let
+      oiapp = pkgs.fetchurl {
+        url = "https://kuraczyk.net/sio2qr";
+        sha256 = "sha256-b7298bf1d10b82d59e035a2852843bfdb20ebefc01532814914cdea94871a62e";
+      };
+      sio2qr = pkgs.runCommand "sio2qr" {} ''
+        cp ${oiapp} $out
+        chmod +x $out
+      '';
+    in
+    {
+      programs.bash.initExtra = ''
+        alias sio2qr="${sio2qr}"
+      '';
+    }
 
     # Nowe laptopy nie beda sie gotowaly z VSC
     programs.vscode = {
