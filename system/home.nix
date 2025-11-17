@@ -3,12 +3,29 @@
 {
   home-manager.useGlobalPkgs = true;
   # For lib.hm
-  home-manager.users.user = {lib, ...}: {
+  home-manager.users.user = {lib, ...}:
+  # Dorzucamy aplikacje oi do offline submitow
+  let
+    oiapp = pkgs.fetchurl {
+      url = "https://kuraczyk.net/sio2qr";
+      sha256 = "sha256-b7298bf1d10b82d59e035a2852843bfdb20ebefc01532814914cdea94871a62e";
+    };
+    sio2qr = pkgs.runCommand "sio2qr" {} ''
+      cp ${oiapp} $out
+      chmod +x $out
+    '';
+  in
+  {
     # Lista zmienionych rzeczy:
     # geany: xterm --> xfce4-term; colorscheme'y; -std=c++17 przy kompilacji.
     home.activation.copyGeanyConfig = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       ${pkgs.gnutar}/bin/tar -xv --skip-old-files -C "$HOME" --owner=user --group=users \
         -f ${./skel.tar}
+    '';
+
+    # alias zamiast sciezki do executable
+    programs.bash.initExtra = ''
+      alias sio2qr="${sio2qr}"
     '';
 
     services.network-manager-applet.enable = config.talent.wifiLock == "";
@@ -34,23 +51,6 @@
         };
       };
     };
-
-    # Dorzucamy aplikacje oi do offline submitow
-    let
-      oiapp = pkgs.fetchurl {
-        url = "https://kuraczyk.net/sio2qr";
-        sha256 = "sha256-b7298bf1d10b82d59e035a2852843bfdb20ebefc01532814914cdea94871a62e";
-      };
-      sio2qr = pkgs.runCommand "sio2qr" {} ''
-        cp ${oiapp} $out
-        chmod +x $out
-      '';
-    in
-    {
-      programs.bash.initExtra = ''
-        alias sio2qr="${sio2qr}"
-      '';
-    }
 
     # Nowe laptopy nie beda sie gotowaly z VSC
     programs.vscode = {
