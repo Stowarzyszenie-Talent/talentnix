@@ -3,6 +3,10 @@
 {
   # Silent boot
   boot.loader.grub = {
+    enable = true;
+    efiSupport = true;
+    efiInstallAsRemovable = true;
+
     splashImage = null;
     extraConfig = ''
       timeout_style=hidden
@@ -94,7 +98,7 @@
         exit 0
       fi
       echo -e "Usage:\n   talentctl <subcommand> ...\n"
-      echo -e "Available subcommands:\n - update\n - clear\n - cancel_clear\n - wifiLock [SSID]\n"
+      echo -e "Available subcommands:\n - update\n - clear\n - cancel_clear\n - wifiLock [SSID]\n - persist/nopersist\n"
     '';
   in
   [
