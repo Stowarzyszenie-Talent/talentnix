@@ -79,7 +79,7 @@ get_config="https://talent.jajco.net/talentnix/config/$mac"
 
 if ! ping -c 1 -W 2 1.1.1.1 &>/dev/null; then
 	warn "Cannot connect to the internet, waiting 10 seconds..."
-    sleep 10
+    sleep 5
 fi
 
 status_config=$(curl -s -o /dev/null -w "%{http_code}" "$get_config" || echo "000")
@@ -129,20 +129,21 @@ else
 	done
 fi
 
+# Force grub to install for UEFI system not for BIOS
+grub_install_device="nodev"
+
 if [[ $install_device =~ ^/dev/nvme[0-9]+n[0-9]+$ ]]; then
 	partition_efi="${install_device}p1"
 	partition_root="${install_device}p2"
 	partition_home="${install_device}p3"
 	partition_workers="${install_device}p4"
 	partition_swap="${install_device}p5"
-	grub_install_device="nodev"
 else
 	partition_efi="${install_device}1"
 	partition_root="${install_device}2"
 	partition_home="${install_device}3"
 	partition_workers="${install_device}4"
 	partition_swap="${install_device}5"
-	grub_install_device="$install_device"
 fi
 
 log "Unmounting partitions"
