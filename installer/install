@@ -72,39 +72,78 @@ function print_devices() {
 	fi
 }
 
-log "Available devices:"
-lsblk -d -o NAME,SIZE
-echo
-print_devices "sd" "/dev/sd[a-Z]+"
-print_devices "vd" "/dev/vd[a-Z]+"
-print_devices "nvme" "/dev/nvme[0-9]+n[0-9]+"
+mac=$(ip link show | grep -A1 "^[0-9].*state UP" | grep -v "lo\|wlan\|wlp\|ww" | grep "link/ether" | head -n1 | awk '{print $2}' || true)
 
-while true; do
-	prompt "Installation device path:"
-	read -r install_device
+get_hostname="https://talent.jajco.net/talentnix/hostname/$mac"
+get_config="https://talent.jajco.net/talentnix/config/$mac"
 
-	if [[ $install_device =~ ^/dev/nvme[0-9]+n[0-9]+$ ]]; then
-    partition_efi="${install_device}p1"
-    partition_root="${install_device}p2"
-    partition_home="${install_device}p3"
-    partition_workers="${install_device}p4"
-    partition_swap="${install_device}p5"
-    grub_install_device="nodev"
-  else
-    partition_efi="${install_device}1"
-    partition_root="${install_device}2"
-    partition_home="${install_device}3"
-    partition_workers="${install_device}4"
-    partition_swap="${install_device}5"
-    grub_install_device=install_device
-  fi
+if ! ping -c 1 -W 2 1.1.1.1 &>/dev/null; then
+	warn "Cannot connect to the internet, waiting 10 seconds..."
+    sleep 10
+fi
 
-	if [[ -b $install_device ]]; then
-		break
-	else
-		err "$install_device is not a block device"
-	fi
-done
+status_config=$(curl -s -o /dev/null -w "%{http_code}" "$get_config" || echo "000")
+
+if [ "$status_config" -eq 200 ]; then
+	source <(curl -sS "$get_config")
+fi
+
+wifiLock="${WIFI_LOCK:-}"
+clearHomeAlways="${CLEAR_HOME_ALWAYS:-}"
+rootPwdFile="${ROOT_PWD_FILE:-}"
+
+if [ "$rootPwdFile" != "" ]; then
+    if [ $(curl -s -o /dev/null -w "%{http_code}" "$rootPwdFile" || echo "000") -eq 200 ]; then
+		rm -rf /tmp/config
+		mkdir /tmp/config
+		curl -sS -o "/tmp/config/rootPassword" "$rootPwdFile"
+    else
+        warn "Unable to fetch root password file. Setting to default."
+    fi
+else
+    warn "Root password file was not found or not set. Setting to default."
+fi
+
+# TODO: read from /install/size??
+min_size_bytes="322122547200"
+
+if [ $(lsblk -d -n -o NAME | grep -E "^(nvme|sd|vd)" | wc -l) -eq 1 ] && [ $(lsblk -d -n -b -o NAME,SIZE | grep -E "^(nvme|sd|vd)" | awk -v min="$min_size_bytes" '$2 >= min {count++} END {print count+0}') -eq 1 ]; then
+	read -r install_device <<< "/dev/$(lsblk -d -n -o NAME | grep -E "^(nvme|sd|vd)")"
+else
+	log "Available devices:"
+	lsblk -d -o NAME,SIZE
+	echo
+	print_devices "sd" "/dev/sd[a-Z]+"
+	print_devices "vd" "/dev/vd[a-Z]+"
+	print_devices "nvme" "/dev/nvme[0-9]+n[0-9]+"
+
+	while true; do
+		prompt "Installation device path:"
+		read -r install_device
+
+		if [[ -b $install_device ]]; then
+			break
+		else
+			err "$install_device is not a block device"
+		fi
+	done
+fi
+
+if [[ $install_device =~ ^/dev/nvme[0-9]+n[0-9]+$ ]]; then
+	partition_efi="${install_device}p1"
+	partition_root="${install_device}p2"
+	partition_home="${install_device}p3"
+	partition_workers="${install_device}p4"
+	partition_swap="${install_device}p5"
+	grub_install_device="nodev"
+else
+	partition_efi="${install_device}1"
+	partition_root="${install_device}2"
+	partition_home="${install_device}3"
+	partition_workers="${install_device}4"
+	partition_swap="${install_device}5"
+	grub_install_device="$install_device"
+fi
 
 log "Unmounting partitions"
 umount -Rq /mnt || true
@@ -126,12 +165,23 @@ mkswap -q -L talentnix-swap "${partition_swap}"
 
 log "Generating default configuration"
 
-prompt "Hostname:"
-# shellcheck disable=2034
-read -r hostname
+if [ $(curl -s -o /dev/null -w "%{http_code}" "$get_hostname" || echo "000") -eq 200 ]; then
+    hostname=$(curl -s "$get_hostname")
+	log "Hello!! I'm $hostname."
+else
+    prompt "Hostname:"
+	# shellcheck disable=2034
+	read -r hostname
+fi
 
-prompt "Wifi SSID to lock to (or blank for no lock):"
-read -r wifiLock
+if [ "$wifiLock" == "" ]; then
+	prompt "Wifi SSID to lock to (or blank for no lock):"
+	read -r wifiLock
+fi
+
+if [ "$wifiLock" == "false" ]; then
+	wifiLock=""
+fi
 
 rm -rf /tmp/installer
 mkdir /tmp/installer
@@ -141,6 +191,7 @@ mount -o noatime "${partition_root}" /mnt
 swapon "${partition_swap}"
 mount -o noatime -m "${partition_home}" /mnt/home
 mount -o noatime -m "${partition_efi}" /mnt/boot
+mount -o noatime -m "${partition_workers}" /mnt/worker
 
 mkdir -p /mnt/etc
 
@@ -150,12 +201,23 @@ sed -i "s,@wifiLock@,$wifiLock,g" /mnt/etc/nixos/flake.nix
 sed -i "s,@install_device@,$grub_install_device,g" /mnt/etc/nixos/flake.nix
 sed -i "s,@_stateVersion@,@stateVersion@,g" /mnt/etc/nixos/flake.nix
 
+if [ "$rootPwdFile" != "" ]; then
+	rm -rf /mnt/etc/nixos/rootPassword
+	cp /tmp/config/rootPassword /mnt/etc/nixos/rootPassword
+fi
+
 nixos-generate-config --root /mnt --show-hardware-config > /mnt/etc/nixos/hardware-configuration.nix
 
-prompt "Always clear user home? [y/N]"
-[[ $(pick y N) == y ]] &&
-	touch /mnt/etc/clear_home_always
-echo
+if [ "$clearHomeAlways" == "" ]; then
+	prompt "Always clear user home? [y/N]"
+	[[ $(pick y N) == y ]] &&
+		touch /mnt/etc/clear_home_always
+	echo
+else
+	if [ "$clearHomeAlways" == "true" ]; then
+		touch /mnt/etc/clear_home_always
+	fi
+fi
 
 # Copy this repository to the target's nix store and override the talentnix input so that installation can be performed without having access to this repository.
 nix copy --offline --no-require-sigs --to /mnt @this@ @nixpkgs@ @hm@ @partialSystem@
@@ -167,6 +229,6 @@ nix copy --offline --no-require-sigs --to /mnt @this@ @nixpkgs@ @hm@ @partialSys
         --override-input home-manager @hm@
 )
 
-nixos-install --no-channel-copy --flake /mnt/etc/nixos#"$hostname"
+nixos-install --no-channel-copy --no-root-password --flake /mnt/etc/nixos#"$hostname"
 
 reboot

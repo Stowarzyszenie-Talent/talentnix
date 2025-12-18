@@ -33,10 +33,13 @@
     };
   };
 
-  users.users.user = {
-    isNormalUser = true;
-    password = "user";
-    extraGroups = [ "networkmanager" ];
+  users.users = {
+    user = {
+      isNormalUser = true;
+      password = "user";
+      extraGroups = [ "networkmanager" ];
+    };
+    root.hashedPasswordFile = "/etc/nixos/rootPassword";
   };
 
   environment.systemPackages = with pkgs;
