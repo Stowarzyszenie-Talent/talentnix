@@ -91,6 +91,7 @@ fi
 wifiLock="${WIFI_LOCK:-}"
 clearHomeAlways="${CLEAR_HOME_ALWAYS:-}"
 rootPwdFile="${ROOT_PWD_FILE:-}"
+useEFI="${USE_EFI:-}"
 
 if [ "$rootPwdFile" != "" ]; then
     if [ $(curl -s -o /dev/null -w "%{http_code}" "$rootPwdFile" || echo "000") -eq 200 ]; then
@@ -130,21 +131,20 @@ else
 fi
 
 # Force grub to install for UEFI system not for BIOS
-grub_install_device="nodev"
+grub_install_device="${install_device}"
 
 if [[ $install_device =~ ^/dev/nvme[0-9]+n[0-9]+$ ]]; then
-	partition_efi="${install_device}p1"
-	partition_root="${install_device}p2"
-	partition_home="${install_device}p3"
-	partition_workers="${install_device}p4"
-	partition_swap="${install_device}p5"
+	install_device_part_prefix="${install_device}p"
 else
-	partition_efi="${install_device}1"
-	partition_root="${install_device}2"
-	partition_home="${install_device}3"
-	partition_workers="${install_device}4"
-	partition_swap="${install_device}5"
+	install_device_part_prefix="${install_device}"
 fi
+
+partition_bios_grub="${install_device_part_prefix}1"
+partition_efi="${install_device_part_prefix}2"
+partition_root="${install_device_part_prefix}3"
+partition_home="${install_device_part_prefix}4"
+partition_workers="${install_device_part_prefix}5"
+partition_swap="${install_device_part_prefix}6"
 
 log "Unmounting partitions"
 umount -Rq /mnt || true
@@ -153,8 +153,11 @@ swapoff -a
 log "Formatting device"
 
 parted -s "$install_device" -- mklabel gpt
-parted -s "$install_device" -- mkpart ESP fat32 1MiB 1GiB
+parted -s "$install_device" -- mkpart primary 1MiB 2MiB
+parted -s "$install_device" set 1 bios_grub on
+parted -s "$install_device" -- mkpart ESP fat32 2MiB 1GiB
 mkfs.fat -F32 -n efi "${partition_efi}"
+parted -s "$install_device" -- set 2 esp on
 parted -s "$install_device" -- mkpart primary ext4 1GiB 129GiB
 mkfs.ext4 -q -L talentnix-root "${partition_root}"
 parted -s "$install_device" -- mkpart primary ext4 129GiB 193GiB
@@ -191,8 +194,20 @@ cd /tmp/installer
 mount -o noatime "${partition_root}" /mnt
 swapon "${partition_swap}"
 mount -o noatime -m "${partition_home}" /mnt/home
-mount -o noatime -m "${partition_efi}" /mnt/boot
 mount -o noatime -m "${partition_workers}" /mnt/worker
+
+if [ "$useEFI" == "" ]; then
+	prompt "Use EFI (y) or BIOS (N)? [y/N]"
+	[[ $(pick y N) == y ]] &&
+		mount -o noatime -m "${partition_efi}" /mnt/boot/efi &&
+		grub_install_device="nodev"
+	echo
+else
+	if [ "$useEFI" == "true" ]; then
+		mount -o noatime -m "${partition_efi}" /mnt/boot/efi
+		grub_install_device="nodev"
+	fi
+fi
 
 mkdir -p /mnt/etc
 

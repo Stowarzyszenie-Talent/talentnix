@@ -1,16 +1,21 @@
 { pkgs, lib, config, ... }:
 
+let
+  isNodev = config.boot.loader.grub.devices == [ "nodev" ];
+in
 {
   # Silent boot
   boot.loader.grub = {
     enable = true;
-    efiSupport = true;
-    efiInstallAsRemovable = true;
-
+    efiSupport = if isNodev then true else false;
+    efiInstallAsRemovable = if isNodev then true else false;
     splashImage = null;
     extraConfig = ''
       timeout_style=hidden
     '';
+  };
+  boot.loader.efi lib.mkIf isNodev {
+    efiSysMountPoint = "/boot/efi";
   };
   boot.loader.timeout = 1;
   boot.initrd.verbose = false;
