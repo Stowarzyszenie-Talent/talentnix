@@ -1,5 +1,9 @@
 { pkgs, lib, config, ... }:
 
+let
+  obozUrl = "https://oboz.talent.edu.pl";
+  wyzwUrl = "https://wyzwania.programuj.edu.pl";
+in
 {
   home-manager.useGlobalPkgs = true;
   # For lib.hm
@@ -26,17 +30,35 @@
           bookmarks = [
             {
               name = "Obozowe SIO2";
-              url = "https://oboz.talent.edu.pl";
+              url = obozUrl;
             }
             {
               name = "Wyzwania";
-              url = "https://wyzwania.programuj.edu.pl";
+              url = wyzwUrl;
             }
           ];
         }];
         search = {
           default = "ddg";
           force = true;
+        };
+        # TODO:
+        # - Don't show "Import bookmarks" in the bookmark bar.
+        # - Empty the initial shortcuts like youtube and wikipedia.
+        settings = {
+          # Disable the "Import bookmarks" and onboarding tour.
+          "browser.aboutwelcome.enabled" = false;
+          "browser.messaging-system.whatsNewPanel.enabled" = false;
+
+          # Disable the "Privacy Notice" and data collection prompts.
+          "datareporting.policy.dataSubmissionEnabled" = false;
+          "datareporting.healthreport.uploadEnabled" = false;
+          "browser.discovery.enabled" = false;
+
+          # Clean up the new tab page (shortcuts, pocket, etc.).
+          "browser.newtabpage.activity-stream.showSponsored" = false;
+          "browser.newtabpage.activity-stream.showSponsoredTopSites" = false;
+          "browser.newtabpage.activity-stream.feeds.section.topstories" = false;
         };
       };
     };
