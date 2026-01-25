@@ -33,6 +33,8 @@ function prompt() {
 	echo -n "[1;35m==> [0m$* " >/dev/stderr
 }
 
+pick_result=""
+
 function pick() {
 	local default
 
@@ -40,19 +42,17 @@ function pick() {
 		[[ ${#option} != 1 ]] && abort "pick: $option is not a single letter"
 		[[ ${option,,} != "$option" ]] && default=${option,,}
 	done
+    pick_result="$default"
 
 	local in
 	read -rn 1 in
 	in=${in,,}
 
 	for option in "$@"; do
-		[[ $in == "$option" ]] && {
-			echo -n "$option";
-			return;
-		}
+		[[ $in == "$option" ]] && pick_result="$option"
 	done
 
-	echo -n "$default"
+    [ "$in" != "" ] && echo || true
 }
 
 if [[ $(id -u) -ne 0 ]]; then
@@ -121,17 +121,14 @@ fi
 min_size_gibibytes=300;
 min_size_bytes="$((min_size_gibibytes*1024*1024*1024))"
 
-if [ $(lsblk -d -n -o NAME | grep -E "^(nvme|sd|vd)" | wc -l) -eq 1 ] && [ $(lsblk -d -n -b -o NAME,SIZE | grep -E "^(nvme|sd|vd)" | awk -v min="$min_size_bytes" '$2 >= min {count++} END {print count+0}') -eq 1 ]; then
-	if [ "$status_config" -eq 200 ]; then
-		read -r install_device <<< "/dev/$(lsblk -d -n -o NAME | grep -E "^(nvme|sd|vd)")"
-	else
+if [ $(lsblk -d -n -o NAME | grep -E "^(nvme|sd|vd)" | wc -l) -eq 1 ] &&
+   [ $(lsblk -d -n -b -o NAME,SIZE | grep -E "^(nvme|sd|vd)" | awk -v min="$min_size_bytes" '$2 >= min {count++} END {print count+0}') -eq 1 ]; then
+	if [ "$status_config" != "200" ]; then
 		prompt "Do you want to install talentnix? (IT WILL WIPE YOUR DRIVE!!!) [y/N]"
-		if [[ $(pick y N) == y ]]; then
-			read -r install_device <<< "/dev/$(lsblk -d -n -o NAME | grep -E "^(nvme|sd|vd)")"
-		else
-			exit 0
-		fi
-	fi
+        pick y N
+		[[ $pick_result != y ]] && exit 0
+    fi
+    read -r install_device <<< "/dev/$(lsblk -d -n -o NAME | grep -E "^(nvme|sd|vd)")"
 else
 	log "Available devices:"
 	lsblk -d -o NAME,SIZE
@@ -175,16 +172,16 @@ parted -s "$install_device" -- mklabel gpt
 parted -s "$install_device" -- mkpart primary 1MiB 2MiB
 parted -s "$install_device" set 1 bios_grub on
 parted -s "$install_device" -- mkpart ESP fat32 2MiB 1GiB
-mkfs.fat -F32 -n EFI "${partition_efi}"
+mkfs.fat -I -F32 -n EFI "${partition_efi}"
 parted -s "$install_device" -- set 2 esp on
 parted -s "$install_device" -- mkpart primary ext4 1GiB 129GiB
-mkfs.ext4 -q -L talentnix-root "${partition_root}"
+mkfs.ext4 -q -F -L talentnix-root "${partition_root}"
 parted -s "$install_device" -- mkpart primary ext4 129GiB 193GiB
-mkfs.ext4 -q -L talentnix-home "${partition_home}"
+mkfs.ext4 -q -F -L talentnix-home "${partition_home}"
 parted -s "$install_device" -- mkpart primary ext4 193GiB 257GiB
-mkfs.ext4 -q -L talentnix-worker "${partition_workers}"
+mkfs.ext4 -q -F -L talentnix-worker "${partition_workers}"
 parted -s "$install_device" -- mkpart primary linux-swap -32GiB 100%
-mkswap -q -L talentnix-swap "${partition_swap}"
+mkswap -q -f -L talentnix-swap "${partition_swap}"
 
 log "Generating default configuration"
 
@@ -217,14 +214,12 @@ mount -o noatime -m "${partition_workers}" /mnt/worker
 
 if [ "$useEFI" == "" ]; then
 	prompt "Use EFI (y) or BIOS (N)? [y/N]"
-	[[ $(pick y N) == y ]] &&
-		mount -o noatime -m "${partition_efi}" /mnt/boot/efi &&
-		install_device="nodev"
-else
-	if [ "$useEFI" == "true" ]; then
-		mount -o noatime -m "${partition_efi}" /mnt/boot/efi
-		install_device="nodev"
-	fi
+    pick y N
+    [[ $pick_result == y ]] && useEFI="true"
+fi
+if [ "$useEFI" == "true" ]; then
+    mount -o noatime -m "${partition_efi}" /mnt/boot/efi
+    install_device="nodev"
 fi
 
 mkdir -p /mnt/etc
@@ -244,13 +239,11 @@ nixos-generate-config --root /mnt --show-hardware-config > /mnt/etc/nixos/hardwa
 
 if [ "$clearHomeAlways" == "" ]; then
 	prompt "Always clear user home? [y/N]"
-	[[ $(pick y N) == y ]] &&
-		touch /mnt/etc/clear_home_always
-	echo
-else
-	if [ "$clearHomeAlways" == "true" ]; then
-		touch /mnt/etc/clear_home_always
-	fi
+    pick y N
+    [[ $pick_result == y ]] && clear_home_always="true"
+fi
+if [ "$clearHomeAlways" == "true" ]; then
+    touch /mnt/etc/clear_home_always
 fi
 
 # Copy this repository to the target's nix store and override the talentnix input so that installation can be performed without having access to this repository.
