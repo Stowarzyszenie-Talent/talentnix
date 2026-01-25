@@ -53,21 +53,21 @@ in
         findutils
         parted
         stdenvNoCC
-      ];
+      ];      
+      script = pkgs.substituteAll {
+        src = ./install;
+        template = ./template;
+        this = ./..;
+        inherit nixpkgs partialSystem;
+        hm = home-manager;
+        stateVersion = config.system.nixos.release;
+      };
       installer = pkgs.runCommand "talentnix-installer"
         {
-          script = pkgs.substituteAll {
-            src = ./install;
-            template = ./template;
-            this = ./..;
-            inherit nixpkgs partialSystem;
-            hm = home-manager;
-            stateVersion = config.system.nixos.release;
-          };
           nativeBuildInputs = with pkgs; [ makeWrapper ];
         } ''
         mkdir -p $out/bin
-        cp $script $out/bin/talentnix-install
+        cp ${script} $out/bin/talentnix-install
         chmod +x $out/bin/talentnix-install
         wrapProgram $out/bin/talentnix-install \
           --prefix PATH : ${lib.makeBinPath path}

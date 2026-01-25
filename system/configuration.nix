@@ -14,7 +14,7 @@ in
       timeout_style=hidden
     '';
   };
-  boot.loader.efi lib.mkIf isNodev {
+  boot.loader.efi = lib.mkIf isNodev {
     efiSysMountPoint = "/boot/efi";
   };
   boot.loader.timeout = 1;

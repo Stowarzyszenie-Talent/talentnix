@@ -100,16 +100,27 @@ if [ "$rootPwdFile" != "" ]; then
 		curl -sS -o "/tmp/config/rootPassword" "$rootPwdFile"
     else
         warn "Unable to fetch root password file. Setting to default."
+        rootPwdFile=""
     fi
 else
     warn "Root password file was not found or not set. Setting to default."
 fi
 
 # TODO: read from /install/size??
-min_size_bytes="322122547200"
+min_size_gibibytes=300;
+min_size_bytes="$((min_size_gibibytes*1024*1024*1024))"
 
 if [ $(lsblk -d -n -o NAME | grep -E "^(nvme|sd|vd)" | wc -l) -eq 1 ] && [ $(lsblk -d -n -b -o NAME,SIZE | grep -E "^(nvme|sd|vd)" | awk -v min="$min_size_bytes" '$2 >= min {count++} END {print count+0}') -eq 1 ]; then
-	read -r install_device <<< "/dev/$(lsblk -d -n -o NAME | grep -E "^(nvme|sd|vd)")"
+	if [ "$status_config" -eq 200 ]; then
+		read -r install_device <<< "/dev/$(lsblk -d -n -o NAME | grep -E "^(nvme|sd|vd)")"
+	else
+		prompt "Do you want to install talentnix? (IT WILL WIPE YOUR DRIVE!!!) [y/N]"
+		if [[ $(pick y N) == y ]]; then
+			read -r install_device <<< "/dev/$(lsblk -d -n -o NAME | grep -E "^(nvme|sd|vd)")"
+		else
+			exit 0
+		fi
+	fi
 else
 	log "Available devices:"
 	lsblk -d -o NAME,SIZE
@@ -129,9 +140,6 @@ else
 		fi
 	done
 fi
-
-# Force grub to install for UEFI system not for BIOS
-grub_install_device="${install_device}"
 
 if [[ $install_device =~ ^/dev/nvme[0-9]+n[0-9]+$ ]]; then
 	install_device_part_prefix="${install_device}p"
@@ -156,7 +164,7 @@ parted -s "$install_device" -- mklabel gpt
 parted -s "$install_device" -- mkpart primary 1MiB 2MiB
 parted -s "$install_device" set 1 bios_grub on
 parted -s "$install_device" -- mkpart ESP fat32 2MiB 1GiB
-mkfs.fat -F32 -n efi "${partition_efi}"
+mkfs.fat -F32 -n EFI "${partition_efi}"
 parted -s "$install_device" -- set 2 esp on
 parted -s "$install_device" -- mkpart primary ext4 1GiB 129GiB
 mkfs.ext4 -q -L talentnix-root "${partition_root}"
@@ -200,12 +208,11 @@ if [ "$useEFI" == "" ]; then
 	prompt "Use EFI (y) or BIOS (N)? [y/N]"
 	[[ $(pick y N) == y ]] &&
 		mount -o noatime -m "${partition_efi}" /mnt/boot/efi &&
-		grub_install_device="nodev"
-	echo
+		install_device="nodev"
 else
 	if [ "$useEFI" == "true" ]; then
 		mount -o noatime -m "${partition_efi}" /mnt/boot/efi
-		grub_install_device="nodev"
+		install_device="nodev"
 	fi
 fi
 
@@ -214,7 +221,7 @@ mkdir -p /mnt/etc
 cp --no-preserve=all -r "@template@" /mnt/etc/nixos
 sed -i "s,@hostname@,$hostname,g" /mnt/etc/nixos/flake.nix
 sed -i "s,@wifiLock@,$wifiLock,g" /mnt/etc/nixos/flake.nix
-sed -i "s,@install_device@,$grub_install_device,g" /mnt/etc/nixos/flake.nix
+sed -i "s,@install_device@,$install_device,g" /mnt/etc/nixos/flake.nix
 sed -i "s,@_stateVersion@,@stateVersion@,g" /mnt/etc/nixos/flake.nix
 
 if [ "$rootPwdFile" != "" ]; then

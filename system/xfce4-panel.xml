@@ -80,22 +80,22 @@
     <property name="plugin-12" type="string" value="separator"/>
     <property name="plugin-13" type="string" value="launcher">
       <property name="items" type="array">
-        <value type="string" value="17660794361.desktop"/>
+        <value type="string" value="xfce4-terminal-emulator.desktop"/>
       </property>
     </property>
     <property name="plugin-14" type="string" value="launcher">
       <property name="items" type="array">
-        <value type="string" value="17660794362.desktop"/>
+        <value type="string" value="xfce4-file-manager.desktop"/>
       </property>
     </property>
     <property name="plugin-15" type="string" value="launcher">
       <property name="items" type="array">
-        <value type="string" value="17660794363.desktop"/>
+        <value type="string" value="xfce4-web-browser.desktop"/>
       </property>
     </property>
     <property name="plugin-16" type="string" value="launcher">
       <property name="items" type="array">
-        <value type="string" value="17660794364.desktop"/>
+        <value type="string" value="xfce4-appfinder.desktop"/>
       </property>
     </property>
     <property name="plugin-17" type="string" value="separator"/>
