@@ -219,10 +219,10 @@ fi
 mkdir -p /mnt/etc
 
 cp --no-preserve=all -r "@template@" /mnt/etc/nixos
-sed -i "s,@hostname@,$hostname,g" /mnt/etc/nixos/flake.nix
-sed -i "s,@wifiLock@,$wifiLock,g" /mnt/etc/nixos/flake.nix
-sed -i "s,@install_device@,$install_device,g" /mnt/etc/nixos/flake.nix
-sed -i "s,@_stateVersion@,@stateVersion@,g" /mnt/etc/nixos/flake.nix
+sed -i "s,&hostname&,$hostname,g" /mnt/etc/nixos/flake.nix
+sed -i "s,&wifiLock&,$wifiLock,g" /mnt/etc/nixos/flake.nix
+sed -i "s,&install_device&,$install_device,g" /mnt/etc/nixos/flake.nix
+sed -i "s,&_stateVersion&,@stateVersion@,g" /mnt/etc/nixos/flake.nix
 
 if [ "$rootPwdFile" != "" ]; then
 	rm -rf /mnt/etc/nixos/rootPassword
