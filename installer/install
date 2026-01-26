@@ -103,6 +103,8 @@ wifiLock="${WIFI_LOCK:-}"
 clearHomeAlways="${CLEAR_HOME_ALWAYS:-}"
 rootPwdFile="${ROOT_PWD_FILE:-}"
 useEFI="${USE_EFI:-}"
+setRootPass="${SET_ROOT_PWD:-}"
+poweroffAfterInstall="${POWEROFF_AFTER_INSTALL:-}"
 
 if [ "$rootPwdFile" != "" ]; then
     if [ $(curl -s -o /dev/null -w "%{http_code}" "$rootPwdFile" || echo "000") -eq 200 ]; then
@@ -240,10 +242,26 @@ nixos-generate-config --root /mnt --show-hardware-config > /mnt/etc/nixos/hardwa
 if [ "$clearHomeAlways" == "" ]; then
 	prompt "Always clear user home? [y/N]"
     pick y N
-    [[ $pick_result == y ]] && clear_home_always="true"
+    [[ $pick_result == y ]] && clearHomeAlways="true"
 fi
 if [ "$clearHomeAlways" == "true" ]; then
     touch /mnt/etc/clear_home_always
+fi
+
+rootPassFlag="--no-root-password"
+if [ "$setRootPass" == "" ]; then
+	prompt "Set root password? [y/N]"
+    pick y N
+    [[ $pick_result == y ]] && setRootPass="true"
+fi
+if [ "$setRootPass" == "true" ]; then
+  	rootPassFlag=""
+fi
+
+if [ "$poweroffAfterInstall" == "" ]; then
+	prompt "After installation, power off (y) or reboot (N)? [y/N]"
+    pick y N
+    [[ $pick_result == y ]] && poweroffAfterInstall="true"
 fi
 
 # Copy this repository to the target's nix store and override the talentnix input so that installation can be performed without having access to this repository.
@@ -256,6 +274,9 @@ nix copy --offline --no-require-sigs --to /mnt @this@ @nixpkgs@ @hm@ @partialSys
         --override-input home-manager @hm@
 )
 
-nixos-install --no-channel-copy --no-root-password --flake /mnt/etc/nixos#"$hostname"
+nixos-install --no-channel-copy $(echo $rootPassFlag) --flake /mnt/etc/nixos#"$hostname"
 
+if [ "$poweroffAfterInstall" == "true" ]; then
+    poweroff
+fi
 reboot
