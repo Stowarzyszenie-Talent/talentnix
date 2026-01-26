@@ -76,6 +76,8 @@ function try_ping() {
     ping -c 1 -W 2 $1 &>/dev/null
 }
 
+configs_server="https://flash.talent.edu.pl/talentnix"
+
 internet_tries=1
 while ! try_ping 1.1.1.1 && ! try_ping 8.8.8.8; do
     log "Waiting for internet connection, ${internet_tries} attempts made..."
@@ -90,8 +92,8 @@ log "Got internet connection after ${internet_tries} attempts!                "
 
 mac=$(ip link show | grep -A1 "^[0-9].*state UP" | grep -v "lo\|wlan\|wlp\|ww" | grep "link/ether" | head -n1 | awk '{print $2}' || true)
 
-get_hostname="https://talent.jajco.net/talentnix/hostname/$mac"
-get_config="https://talent.jajco.net/talentnix/config/$mac"
+get_hostname="$configs_server/hostname/$mac"
+get_config="$configs_server/config/$mac"
 
 status_config=$(curl -s -o /dev/null -w "%{http_code}" "$get_config" || echo "000")
 
@@ -274,7 +276,7 @@ nix copy --offline --no-require-sigs --to /mnt @this@ @nixpkgs@ @hm@ @partialSys
         --override-input home-manager @hm@
 )
 
-nixos-install --no-channel-copy $(echo $rootPassFlag) --flake /mnt/etc/nixos#"$hostname"
+nixos-install --no-channel-copy $rootPassFlag --flake /mnt/etc/nixos#"$hostname"
 
 if [ "$poweroffAfterInstall" == "true" ]; then
     poweroff
