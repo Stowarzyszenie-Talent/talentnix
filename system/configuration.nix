@@ -1,12 +1,21 @@
 { pkgs, lib, config, ... }:
 
+let
+  isNodev = config.boot.loader.grub.devices == [ "nodev" ];
+in
 {
   # Silent boot
   boot.loader.grub = {
+    enable = true;
+    efiSupport = if isNodev then true else false;
+    efiInstallAsRemovable = if isNodev then true else false;
     splashImage = null;
     extraConfig = ''
       timeout_style=hidden
     '';
+  };
+  boot.loader.efi = lib.mkIf isNodev {
+    efiSysMountPoint = "/boot/efi";
   };
   boot.loader.timeout = 1;
   boot.initrd.verbose = false;
@@ -29,10 +38,13 @@
     };
   };
 
-  users.users.user = {
-    isNormalUser = true;
-    password = "user";
-    extraGroups = [ "networkmanager" ];
+  users.users = {
+    user = {
+      isNormalUser = true;
+      password = "user";
+      extraGroups = [ "networkmanager" ];
+    };
+    root.hashedPasswordFile = "/etc/nixos/rootPassword";
   };
 
   environment.systemPackages = with pkgs;
@@ -94,7 +106,7 @@
         exit 0
       fi
       echo -e "Usage:\n   talentctl <subcommand> ...\n"
-      echo -e "Available subcommands:\n - update\n - clear\n - cancel_clear\n - wifiLock [SSID]\n"
+      echo -e "Available subcommands:\n - update\n - clear\n - cancel_clear\n - wifiLock [SSID]\n - persist/nopersist\n"
     '';
   in
   [

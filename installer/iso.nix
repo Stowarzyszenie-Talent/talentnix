@@ -3,7 +3,8 @@
 let
   partialSystem =
     (nixpkgs.lib.nixosSystem {
-      inherit (pkgs) system;
+      inherit (pkgs);
+      system = pkgs.stdenv.hostPlatform.system;
       modules = [
         talentnix.nixosModules.default
         {
@@ -14,6 +15,13 @@ let
         }
       ];
     }).config.system.build.toplevel;
+  templatePath = builtins.path { path = ./template; name = "talentnix-template"; };
+  thisPath = builtins.path { path = ./..; name = "talentnix-this"; };
+  storeContents = [
+    partialSystem
+    # replaceVars is so bad.
+    templatePath thisPath
+  ];
 in
 {
   imports = [
@@ -23,13 +31,13 @@ in
 
   system.nixos.distroName = "TalentNix";
   system.nixos.distroId = "talentnix";
-  isoImage.isoBaseName = lib.mkForce "talentnix-installer";
   isoImage.squashfsCompression = "zstd -Xcompression-level 9";
   netboot.squashfsCompression = "zstd -Xcompression-level 9";
+  image.baseName = lib.mkForce "talentnix-installer";
 
   # This sets up the nix store on the iso to contain most of the packages required for installation so that one can be performed without an internet connection (although this may not always hold true)
-  isoImage.storeContents = [ partialSystem ];
-  netboot.storeContents = [ partialSystem ];
+  isoImage.storeContents = storeContents;
+  netboot.storeContents = storeContents;
 
   programs.neovim.enable = true;
 
@@ -53,21 +61,20 @@ in
         findutils
         parted
         stdenvNoCC
-      ];
+      ];      
+      script = pkgs.replaceVars ./install {
+        template = templatePath;
+        this = thisPath;
+        inherit nixpkgs partialSystem;
+        hm = home-manager;
+        stateVersion = config.system.nixos.release;
+      };
       installer = pkgs.runCommand "talentnix-installer"
         {
-          script = pkgs.substituteAll {
-            src = ./install;
-            template = ./template;
-            this = ./..;
-            inherit nixpkgs partialSystem;
-            hm = home-manager;
-            stateVersion = config.system.nixos.release;
-          };
           nativeBuildInputs = with pkgs; [ makeWrapper ];
         } ''
         mkdir -p $out/bin
-        cp $script $out/bin/talentnix-install
+        cp ${script} $out/bin/talentnix-install
         chmod +x $out/bin/talentnix-install
         wrapProgram $out/bin/talentnix-install \
           --prefix PATH : ${lib.makeBinPath path}

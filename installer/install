@@ -33,6 +33,8 @@ function prompt() {
 	echo -n "[1;35m==> [0m$* " >/dev/stderr
 }
 
+pick_result=""
+
 function pick() {
 	local default
 
@@ -40,19 +42,17 @@ function pick() {
 		[[ ${#option} != 1 ]] && abort "pick: $option is not a single letter"
 		[[ ${option,,} != "$option" ]] && default=${option,,}
 	done
+    pick_result="$default"
 
 	local in
 	read -rn 1 in
 	in=${in,,}
 
 	for option in "$@"; do
-		[[ $in == "$option" ]] && {
-			echo -n "$option";
-			return;
-		}
+		[[ $in == "$option" ]] && pick_result="$option"
 	done
 
-	echo -n "$default"
+    [ "$in" != "" ] && echo || true
 }
 
 if [[ $(id -u) -ne 0 ]]; then
@@ -72,24 +72,99 @@ function print_devices() {
 	fi
 }
 
-log "Available devices:"
-lsblk -d -o NAME,SIZE
-echo
-print_devices "sd" "/dev/sd[a-Z]+"
-print_devices "vd" "/dev/vd[a-Z]+"
-# TODO: Support NVME, note that this requries adjusting the parted commands below
-# print_devices "nvme" "/dev/nvme[0-9]+n[0-9]+"
+function try_ping() {
+    ping -c 1 -W 2 $1 &>/dev/null
+}
 
-while true; do
-	prompt "Installation device path:"
-	read -r install_device
+configs_server="https://flash.talent.edu.pl/talentnix"
 
-	if [[ -b $install_device ]]; then
-		break
-	else
-		err "$install_device is not a block device"
-	fi
+internet_tries=1
+while ! try_ping 1.1.1.1 && ! try_ping 8.8.8.8; do
+    log "Waiting for internet connection, ${internet_tries} attempts made..."
+    # Make the next message overwrite the above one.
+    tput cuu1
+    ((++internet_tries))
+    sleep 2
 done
+
+# The trailing spaces are to erase the remainder of the "Waiting for..." message.
+log "Got internet connection after ${internet_tries} attempts!                "
+
+mac=$(ip link show | grep -A1 "^[0-9].*state UP" | grep -v "lo\|wlan\|wlp\|ww" | grep "link/ether" | head -n1 | awk '{print $2}' || true)
+
+get_hostname="$configs_server/hostname/$mac"
+get_config="$configs_server/config/$mac"
+
+status_config=$(curl -s -o /dev/null -w "%{http_code}" "$get_config" || echo "000")
+
+if [ "$status_config" -eq 200 ]; then
+	source <(curl -sS "$get_config")
+fi
+
+wifiLock="${WIFI_LOCK:-}"
+clearHomeAlways="${CLEAR_HOME_ALWAYS:-}"
+rootPwdFile="${ROOT_PWD_FILE:-}"
+useEFI="${USE_EFI:-}"
+setRootPass="${SET_ROOT_PWD:-}"
+poweroffAfterInstall="${POWEROFF_AFTER_INSTALL:-}"
+
+if [ "$rootPwdFile" != "" ]; then
+    if [ $(curl -s -o /dev/null -w "%{http_code}" "$rootPwdFile" || echo "000") -eq 200 ]; then
+		rm -rf /tmp/config
+		mkdir /tmp/config
+		curl -sS -o "/tmp/config/rootPassword" "$rootPwdFile"
+    else
+        warn "Unable to fetch root password file. Setting to default."
+        rootPwdFile=""
+    fi
+else
+    warn "Root password file was not found or not set. Setting to default."
+fi
+
+# TODO: read from /install/size??
+min_size_gibibytes=300;
+min_size_bytes="$((min_size_gibibytes*1024*1024*1024))"
+
+if [ $(lsblk -d -n -o NAME | grep -E "^(nvme|sd|vd)" | wc -l) -eq 1 ] &&
+   [ $(lsblk -d -n -b -o NAME,SIZE | grep -E "^(nvme|sd|vd)" | awk -v min="$min_size_bytes" '$2 >= min {count++} END {print count+0}') -eq 1 ]; then
+	if [ "$status_config" != "200" ]; then
+		prompt "Do you want to install talentnix? (IT WILL WIPE YOUR DRIVE!!!) [y/N]"
+        pick y N
+		[[ $pick_result != y ]] && exit 0
+    fi
+    read -r install_device <<< "/dev/$(lsblk -d -n -o NAME | grep -E "^(nvme|sd|vd)")"
+else
+	log "Available devices:"
+	lsblk -d -o NAME,SIZE
+	echo
+	print_devices "sd" "/dev/sd[a-Z]+"
+	print_devices "vd" "/dev/vd[a-Z]+"
+	print_devices "nvme" "/dev/nvme[0-9]+n[0-9]+"
+
+	while true; do
+		prompt "Installation device path:"
+		read -r install_device
+
+		if [[ -b $install_device ]]; then
+			break
+		else
+			err "$install_device is not a block device"
+		fi
+	done
+fi
+
+if [[ $install_device =~ ^/dev/nvme[0-9]+n[0-9]+$ ]]; then
+	install_device_part_prefix="${install_device}p"
+else
+	install_device_part_prefix="${install_device}"
+fi
+
+partition_bios_grub="${install_device_part_prefix}1"
+partition_efi="${install_device_part_prefix}2"
+partition_root="${install_device_part_prefix}3"
+partition_home="${install_device_part_prefix}4"
+partition_workers="${install_device_part_prefix}5"
+partition_swap="${install_device_part_prefix}6"
 
 log "Unmounting partitions"
 umount -Rq /mnt || true
@@ -97,45 +172,99 @@ swapoff -a
 
 log "Formatting device"
 
-parted -s "$install_device" -- mklabel msdos
-parted -s "$install_device" -- mkpart primary ext4 1MiB 32GiB
-mkfs.ext4 -q -L talentnix-root "${install_device}1"
-parted -s "$install_device" -- mkpart primary linux-swap 32GiB 40GiB
-mkswap -q -L talentnix-swap "${install_device}2"
-parted -s "$install_device" -- mkpart primary ext4 40GiB 64GiB
-mkfs.ext4 -q -L talentnix-home "${install_device}3"
+parted -s "$install_device" -- mklabel gpt
+parted -s "$install_device" -- mkpart primary 1MiB 2MiB
+parted -s "$install_device" set 1 bios_grub on
+parted -s "$install_device" -- mkpart ESP fat32 2MiB 1GiB
+mkfs.fat -I -F32 -n EFI "${partition_efi}"
+parted -s "$install_device" -- set 2 esp on
+parted -s "$install_device" -- mkpart primary ext4 1GiB 129GiB
+mkfs.ext4 -q -F -L talentnix-root "${partition_root}"
+parted -s "$install_device" -- mkpart primary ext4 129GiB 193GiB
+mkfs.ext4 -q -F -L talentnix-home "${partition_home}"
+parted -s "$install_device" -- mkpart primary ext4 193GiB 257GiB
+mkfs.ext4 -q -F -L talentnix-worker "${partition_workers}"
+parted -s "$install_device" -- mkpart primary linux-swap -32GiB 100%
+mkswap -q -f -L talentnix-swap "${partition_swap}"
 
 log "Generating default configuration"
 
-prompt "Hostname:"
-# shellcheck disable=2034
-read -r hostname
+if [ $(curl -s -o /dev/null -w "%{http_code}" "$get_hostname" || echo "000") -eq 200 ]; then
+    hostname=$(curl -s "$get_hostname")
+	log "Hello!! I'm $hostname."
+else
+    prompt "Hostname:"
+	# shellcheck disable=2034
+	read -r hostname
+fi
 
-prompt "Wifi SSID to lock to (or blank for no lock):"
-read -r wifiLock
+if [ "$wifiLock" == "" ]; then
+	prompt "Wifi SSID to lock to (or blank for no lock):"
+	read -r wifiLock
+fi
+
+if [ "$wifiLock" == "false" ]; then
+	wifiLock=""
+fi
 
 rm -rf /tmp/installer
 mkdir /tmp/installer
 cd /tmp/installer
 
-mount -o noatime "${install_device}1" /mnt
-swapon "${install_device}2"
-mount -o noatime -m "${install_device}3" /mnt/home
+mount -o noatime "${partition_root}" /mnt
+swapon "${partition_swap}"
+mount -o noatime -m "${partition_home}" /mnt/home
+mount -o noatime -m "${partition_workers}" /mnt/worker
+
+if [ "$useEFI" == "" ]; then
+	prompt "Use EFI (y) or BIOS (N)? [y/N]"
+    pick y N
+    [[ $pick_result == y ]] && useEFI="true"
+fi
+if [ "$useEFI" == "true" ]; then
+    mount -o noatime -m "${partition_efi}" /mnt/boot/efi
+    install_device="nodev"
+fi
 
 mkdir -p /mnt/etc
 
 cp --no-preserve=all -r "@template@" /mnt/etc/nixos
-sed -i "s,@hostname@,$hostname,g" /mnt/etc/nixos/flake.nix
-sed -i "s,@wifiLock@,$wifiLock,g" /mnt/etc/nixos/flake.nix
-sed -i "s,@install_device@,$install_device,g" /mnt/etc/nixos/flake.nix
-sed -i "s,@_stateVersion@,@stateVersion@,g" /mnt/etc/nixos/flake.nix
+sed -i "s,&hostname&,$hostname,g" /mnt/etc/nixos/flake.nix
+sed -i "s,&wifiLock&,$wifiLock,g" /mnt/etc/nixos/flake.nix
+sed -i "s,&install_device&,$install_device,g" /mnt/etc/nixos/flake.nix
+sed -i "s,&_stateVersion&,@stateVersion@,g" /mnt/etc/nixos/flake.nix
+
+if [ "$rootPwdFile" != "" ]; then
+	rm -rf /mnt/etc/nixos/rootPassword
+	cp /tmp/config/rootPassword /mnt/etc/nixos/rootPassword
+fi
 
 nixos-generate-config --root /mnt --show-hardware-config > /mnt/etc/nixos/hardware-configuration.nix
 
-prompt "Always clear user home? [y/N]"
-[[ $(pick Y n) == y ]] &&
-	touch /mnt/etc/clear_home_always
-echo
+if [ "$clearHomeAlways" == "" ]; then
+	prompt "Always clear user home? [y/N]"
+    pick y N
+    [[ $pick_result == y ]] && clearHomeAlways="true"
+fi
+if [ "$clearHomeAlways" == "true" ]; then
+    touch /mnt/etc/clear_home_always
+fi
+
+rootPassFlag="--no-root-password"
+if [ "$setRootPass" == "" ]; then
+	prompt "Set root password? [y/N]"
+    pick y N
+    [[ $pick_result == y ]] && setRootPass="true"
+fi
+if [ "$setRootPass" == "true" ]; then
+  	rootPassFlag=""
+fi
+
+if [ "$poweroffAfterInstall" == "" ]; then
+	prompt "After installation, power off (y) or reboot (N)? [y/N]"
+    pick y N
+    [[ $pick_result == y ]] && poweroffAfterInstall="true"
+fi
 
 # Copy this repository to the target's nix store and override the talentnix input so that installation can be performed without having access to this repository.
 nix copy --offline --no-require-sigs --to /mnt @this@ @nixpkgs@ @hm@ @partialSystem@
@@ -147,6 +276,9 @@ nix copy --offline --no-require-sigs --to /mnt @this@ @nixpkgs@ @hm@ @partialSys
         --override-input home-manager @hm@
 )
 
-nixos-install --no-channel-copy --flake /mnt/etc/nixos#"$hostname"
+nixos-install --no-channel-copy $rootPassFlag --flake /mnt/etc/nixos#"$hostname"
 
+if [ "$poweroffAfterInstall" == "true" ]; then
+    poweroff
+fi
 reboot
