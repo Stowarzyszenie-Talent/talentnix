@@ -76,11 +76,6 @@ function try_ping() {
     ping -c 1 -W 2 $1 &>/dev/null
 }
 
-mac=$(ip link show | grep -A1 "^[0-9].*state UP" | grep -v "lo\|wlan\|wlp\|ww" | grep "link/ether" | head -n1 | awk '{print $2}' || true)
-
-get_hostname="https://talent.jajco.net/talentnix/hostname/$mac"
-get_config="https://talent.jajco.net/talentnix/config/$mac"
-
 internet_tries=1
 while ! try_ping 1.1.1.1 && ! try_ping 8.8.8.8; do
     log "Waiting for internet connection, ${internet_tries} attempts made..."
@@ -92,6 +87,11 @@ done
 
 # The trailing spaces are to erase the remainder of the "Waiting for..." message.
 log "Got internet connection after ${internet_tries} attempts!                "
+
+mac=$(ip link show | grep -A1 "^[0-9].*state UP" | grep -v "lo\|wlan\|wlp\|ww" | grep "link/ether" | head -n1 | awk '{print $2}' || true)
+
+get_hostname="https://talent.jajco.net/talentnix/hostname/$mac"
+get_config="https://talent.jajco.net/talentnix/config/$mac"
 
 status_config=$(curl -s -o /dev/null -w "%{http_code}" "$get_config" || echo "000")
 
