@@ -151,6 +151,20 @@ in
         #DISK_APM_LEVEL_ON_BAT = "254 254";
       };
     };
+    # Remap Copilot key to RControl
+    keyd = {
+      enable = true;
+      keyboards = {
+        default = {
+          ids = [ "*" ];
+          settings = {
+            main = {
+              "leftshift+leftmeta+f23" = "rightcontrol";
+            };
+          };
+        };
+      };
+    };
   };
 
   systemd.services.clear-home = {
