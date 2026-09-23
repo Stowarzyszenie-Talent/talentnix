@@ -2,6 +2,8 @@
 
 let
   isNodev = config.boot.loader.grub.devices == [ "nodev" ];
+  enc = config.talent.encrypted;
+  part = n: "/dev/disk/by-partlabel/${n}";
 in
 {
   # Silent boot
@@ -16,8 +18,22 @@ in
     '';
   };
   boot.loader.efi = lib.mkIf isNodev {
-    efiSysMountPoint = "/boot/efi";
+    efiSysMountPoint = if enc then "/boot" else "/boot/efi";
   };
+
+  boot.initrd.luks.devices = lib.mkIf enc (lib.genAttrs [ "troot" "thome" "twork" ] (n: {
+    device = part n;
+    keyFile = "/k";
+    fallbackToPassword = true;
+    preOpenCommands = builtins.readFile ./hwkey;
+  }));
+  fileSystems = lib.mkIf enc {
+    "/" = { device = "/dev/mapper/troot"; fsType = "ext4"; options = [ "noatime" ]; };
+    "/home" = { device = "/dev/mapper/thome"; fsType = "ext4"; options = [ "noatime" ]; };
+    "/worker" = { device = "/dev/mapper/twork"; fsType = "ext4"; options = [ "noatime" ]; };
+    "/boot" = { device = part "ESP"; fsType = "vfat"; options = [ "umask=0077" ]; };
+  };
+  swapDevices = lib.mkIf enc [ { device = part "tswap"; randomEncryption.enable = true; } ];
   boot.loader.timeout = 1;
   boot.initrd.verbose = false;
   boot.consoleLogLevel = 0;

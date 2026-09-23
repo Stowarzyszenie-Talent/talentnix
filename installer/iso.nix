@@ -10,7 +10,7 @@ let
         {
           boot.loader.grub.devices = [ "/driveless-shelter" ];
           environment.systemPackages = with pkgs; [ grub2 ];
-          fileSystems."/" = { device = "/driveless-shelter"; fsType = "ext4"; };
+          talent.encrypted = true;
           system.stateVersion = config.system.nixos.release;
         }
       ];
@@ -60,6 +60,7 @@ in
         coreutils
         findutils
         parted
+        cryptsetup
         stdenvNoCC
       ];      
       script = pkgs.replaceVars ./install {
