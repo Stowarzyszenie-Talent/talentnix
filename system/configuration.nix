@@ -23,7 +23,11 @@ in
   boot.consoleLogLevel = 0;
   boot.kernelParams = [ "quiet" "udev.log_level=3" ];
 
-  nix.settings.experimental-features = [ "nix-command" "flakes" ];
+  nix.settings = {
+    allowed-users = [ "root" "@wheel" "@home-manager-nix" ];
+    trusted-users = [ "root" ];
+    experimental-features = [ "nix-command" "flakes" ];
+  };
 
   time.timeZone = "Europe/Warsaw";
 
@@ -47,6 +51,9 @@ in
     };
     root.hashedPasswordFile = "/etc/nixos/rootPassword";
   };
+
+  users.groups.home-manager-nix = {};
+  systemd.services."home-manager-user".serviceConfig.Group = "home-manager-nix";
 
   environment.systemPackages = with pkgs;
   let
