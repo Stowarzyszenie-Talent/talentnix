@@ -19,6 +19,7 @@
           boot.loader.grub.devices = [ "&install_device&" ];
           system.stateVersion = "&_stateVersion&";
           talent.wifiLock = "&wifiLock&";
+          talent.encrypted = true;
         }
         talentnix.nixosModules.default
       ];

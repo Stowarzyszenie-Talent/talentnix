@@ -107,6 +107,7 @@ rootPwdFile="${ROOT_PWD_FILE:-}"
 useEFI="${USE_EFI:-}"
 setRootPass="${SET_ROOT_PWD:-}"
 poweroffAfterInstall="${POWEROFF_AFTER_INSTALL:-}"
+luksPwd="${LUKS_PWD:-1234}"
 
 if [ "$rootPwdFile" != "" ]; then
     if [ $(curl -s -o /dev/null -w "%{http_code}" "$rootPwdFile" || echo "000") -eq 200 ]; then
@@ -169,6 +170,7 @@ partition_swap="${install_device_part_prefix}6"
 log "Unmounting partitions"
 umount -Rq /mnt || true
 swapoff -a
+cryptsetup close troot thome twork 2>/dev/null || true
 
 log "Formatting device"
 
@@ -178,14 +180,25 @@ parted -s "$install_device" set 1 bios_grub on
 parted -s "$install_device" -- mkpart ESP fat32 2MiB 1GiB
 mkfs.fat -I -F32 -n EFI "${partition_efi}"
 parted -s "$install_device" -- set 2 esp on
-parted -s "$install_device" -- mkpart primary ext4 1GiB 129GiB
-mkfs.ext4 -q -F -L talentnix-root "${partition_root}"
-parted -s "$install_device" -- mkpart primary ext4 129GiB 193GiB
-mkfs.ext4 -q -F -L talentnix-home "${partition_home}"
-parted -s "$install_device" -- mkpart primary ext4 193GiB 257GiB
-mkfs.ext4 -q -F -L talentnix-worker "${partition_workers}"
-parted -s "$install_device" -- mkpart primary linux-swap -32GiB 100%
+parted -s "$install_device" -- mkpart troot ext4 1GiB 129GiB
+parted -s "$install_device" -- mkpart thome ext4 129GiB 193GiB
+parted -s "$install_device" -- mkpart twork ext4 193GiB 257GiB
+parted -s "$install_device" -- mkpart tswap linux-swap -32GiB 100%
 mkswap -q -f -L talentnix-swap "${partition_swap}"
+
+log "Encrypting partitions"
+
+K=/tmp/hwk sh "@this@/system/hwkey"
+for p in "troot:${partition_root}" "thome:${partition_home}" "twork:${partition_workers}"; do
+	n="${p%%:*}";d="${p#*:}"
+	cryptsetup luksFormat -q --type luks2 --pbkdf pbkdf2 --pbkdf-force-iterations 1000 "$d" /tmp/hwk
+	cryptsetup luksAddKey -q --key-file /tmp/hwk "$d" <(printf %s "$luksPwd")
+	cryptsetup open --key-file /tmp/hwk "$d" "$n"
+done
+rm -f /tmp/hwk
+mkfs.ext4 -q -F -L talentnix-root /dev/mapper/troot
+mkfs.ext4 -q -F -L talentnix-home /dev/mapper/thome
+mkfs.ext4 -q -F -L talentnix-worker /dev/mapper/twork
 
 log "Generating default configuration"
 
@@ -211,10 +224,11 @@ rm -rf /tmp/installer
 mkdir /tmp/installer
 cd /tmp/installer
 
-mount -o noatime "${partition_root}" /mnt
+mount -o noatime /dev/mapper/troot /mnt
 swapon "${partition_swap}"
-mount -o noatime -m "${partition_home}" /mnt/home
-mount -o noatime -m "${partition_workers}" /mnt/worker
+mount -o noatime -m /dev/mapper/thome /mnt/home
+mount -o noatime -m /dev/mapper/twork /mnt/worker
+mount -o noatime,umask=0077 -m "${partition_efi}" /mnt/boot
 
 if [ "$useEFI" == "" ]; then
 	prompt "Use EFI (y) or BIOS (N)? [y/N]"
@@ -222,7 +236,6 @@ if [ "$useEFI" == "" ]; then
     [[ $pick_result == y ]] && useEFI="true"
 fi
 if [ "$useEFI" == "true" ]; then
-    mount -o noatime -m "${partition_efi}" /mnt/boot/efi
     install_device="nodev"
 fi
 
@@ -239,7 +252,7 @@ if [ "$rootPwdFile" != "" ]; then
 	cp /tmp/config/rootPassword /mnt/etc/nixos/rootPassword
 fi
 
-nixos-generate-config --root /mnt --show-hardware-config > /mnt/etc/nixos/hardware-configuration.nix
+nixos-generate-config --root /mnt --no-filesystems --show-hardware-config > /mnt/etc/nixos/hardware-configuration.nix
 
 if [ "$clearHomeAlways" == "" ]; then
 	prompt "Always clear user home? [y/N]"

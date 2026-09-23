@@ -1,3 +1,7 @@
+**DISK ENCRYPTION: WORKING (TESTED IN QEMU, EFI).**
+
+**THE DEFAULT DISK ENCRYPTION PASSWORD IS `1234` - CHANGE IT BEFORE DEPLOYING (SET `LUKS_PWD` IN THE REMOTE CONFIG, OR `cryptsetup luksChangeKey` ON `/dev/disk/by-partlabel/{troot,thome,twork}` AFTER INSTALL)!!!**
+
 # Talentnix
 
 This repo contains a nix flake with:
