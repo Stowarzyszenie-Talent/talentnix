@@ -1,7 +1,7 @@
 {
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/release-25.05";
   inputs.talentnix = {
-    url = "github:Stowarzyszenie-Talent/talentnix";
+    url = "github:Stowarzyszenie-Talent/talentnix/oi34";
     inputs.nixpkgs.follows = "nixpkgs";
   };
   inputs.home-manager = {
