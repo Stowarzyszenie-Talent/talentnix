@@ -102,7 +102,7 @@ in
         "extensions.autoCheckUpdates" = false;
         "extensions.ignoreRecommendations" = true;
 
-        "github.copilot.enable" = false;
+        "chat.disableAIFeatures" = true;
 
         "C_Cpp.default.cppStandard" = "c++23";
         "C_Cpp.default.cStandard" = "c17";
