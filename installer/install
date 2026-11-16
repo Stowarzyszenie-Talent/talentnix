@@ -198,14 +198,7 @@ else
 	read -r hostname
 fi
 
-if [ "$wifiLock" == "" ]; then
-	prompt "Wifi SSID to lock to (or blank for no lock):"
-	read -r wifiLock
-fi
-
-if [ "$wifiLock" == "false" ]; then
-	wifiLock=""
-fi
+wifiLock=""
 
 rm -rf /tmp/installer
 mkdir /tmp/installer
@@ -240,15 +233,6 @@ if [ "$rootPwdFile" != "" ]; then
 fi
 
 nixos-generate-config --root /mnt --show-hardware-config > /mnt/etc/nixos/hardware-configuration.nix
-
-if [ "$clearHomeAlways" == "" ]; then
-	prompt "Always clear user home? [y/N]"
-    pick y N
-    [[ $pick_result == y ]] && clearHomeAlways="true"
-fi
-if [ "$clearHomeAlways" == "true" ]; then
-    touch /mnt/etc/clear_home_always
-fi
 
 rootPassFlag="--no-root-password"
 if [ "$setRootPass" == "" ]; then

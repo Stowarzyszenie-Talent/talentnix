@@ -1,7 +1,14 @@
 { pkgs, lib, config, ... }:
 
 let
-  obozUrl = "https://oboz.talent.edu.pl";
+  oiapp = pkgs.fetchurl {
+    url = "https://oi.kuraczyk.net/sio2qr";
+    sha256 = "sha256-0GqJSlX55vaqIAEEEeXKAWMTyPREAk6pJZSSTo72H48=";
+  };
+  sio2qr = pkgs.runCommand "sio2qr" {} ''
+    cp ${oiapp} $out
+    chmod +x $out
+  '';
   wyzwUrl = "https://wyzwania.programuj.edu.pl";
 in
 {
@@ -20,6 +27,11 @@ in
       force = true;
     };
 
+    programs.bash.enable = true;
+    programs.bash.shellAliases = {
+      sio2qr = "${sio2qr}";
+    };
+
     services.network-manager-applet.enable = config.talent.wifiLock == "";
     programs.firefox = {
       enable = true;
@@ -32,8 +44,12 @@ in
           toolbar = true;
           bookmarks = [
             {
-              name = "Obozowe SIO2";
-              url = obozUrl;
+              name = "SIO2 MIMUW";
+              url = "https://sio2.mimuw.edu.pl";
+            }
+            {
+              name = "OI IDE";
+              url = "https://ide.sio2.mimuw.edu.pl/";
             }
             {
               name = "Wyzwania";
