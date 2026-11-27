@@ -1,19 +1,33 @@
 { pkgs, lib, config, ... }:
 
+let
+  isNodev = config.boot.loader.grub.devices == [ "nodev" ];
+in
 {
   # Silent boot
   boot.loader.grub = {
+    enable = true;
+    users.root.hashedPassword = "grub.pbkdf2.sha512.10000.84A4EBB886410179D199172D98301A698820A875E47B2A058C0FE25B0183A3D27E8D3069594F2F7576B7E49E6C2D489D9FBE9C833858FF50241DF7258B76F863.6A5850EC476AFA48ABF3C9E20B135F603F9479E7546D5D6749054FB0151C6011F5BE5AE419223D0D757EE61B8D2693127E834E2117B7AC463AA375FF3C598061";
+    efiSupport = if isNodev then true else false;
+    efiInstallAsRemovable = if isNodev then true else false;
     splashImage = null;
     extraConfig = ''
       timeout_style=hidden
     '';
+  };
+  boot.loader.efi = lib.mkIf isNodev {
+    efiSysMountPoint = "/boot/efi";
   };
   boot.loader.timeout = 1;
   boot.initrd.verbose = false;
   boot.consoleLogLevel = 0;
   boot.kernelParams = [ "quiet" "udev.log_level=3" ];
 
-  nix.settings.experimental-features = [ "nix-command" "flakes" ];
+  nix.settings = {
+    allowed-users = [ "root" "@wheel" "@home-manager-nix" ];
+    trusted-users = [ "root" ];
+    experimental-features = [ "nix-command" "flakes" ];
+  };
 
   time.timeZone = "Europe/Warsaw";
 
@@ -29,11 +43,17 @@
     };
   };
 
-  users.users.user = {
-    isNormalUser = true;
-    password = "user";
-    extraGroups = [ "networkmanager" ];
+  users.users = {
+    user = {
+      isNormalUser = true;
+      password = "user";
+      extraGroups = [ "networkmanager" ];
+    };
+    root.hashedPasswordFile = "/etc/nixos/rootPassword";
   };
+
+  users.groups.home-manager-nix = {};
+  systemd.services."home-manager-user".serviceConfig.Group = "home-manager-nix";
 
   environment.systemPackages = with pkgs;
   let
@@ -94,7 +114,7 @@
         exit 0
       fi
       echo -e "Usage:\n   talentctl <subcommand> ...\n"
-      echo -e "Available subcommands:\n - update\n - clear\n - cancel_clear\n - wifiLock [SSID]\n"
+      echo -e "Available subcommands:\n - update\n - clear\n - cancel_clear\n - wifiLock [SSID]\n - persist/nopersist\n"
     '';
   in
   [
@@ -137,6 +157,20 @@
         DISK_SPINDOWN_TIMEOUT_ON_AC = "0 0";
         DISK_SPINDOWN_TIMEOUT_ON_BAT = "0 0";
         #DISK_APM_LEVEL_ON_BAT = "254 254";
+      };
+    };
+    # Remap Copilot key to RControl
+    keyd = {
+      enable = true;
+      keyboards = {
+        default = {
+          ids = [ "*" ];
+          settings = {
+            main = {
+              "leftshift+leftmeta+f23" = "rightcontrol";
+            };
+          };
+        };
       };
     };
   };

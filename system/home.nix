@@ -1,21 +1,20 @@
 { pkgs, lib, config, ... }:
 
+let
+  oiapp = pkgs.fetchurl {
+    url = "https://oi.kuraczyk.net/sio2qr";
+    sha256 = "sha256-0GqJSlX55vaqIAEEEeXKAWMTyPREAk6pJZSSTo72H48=";
+  };
+  sio2qr = pkgs.runCommand "sio2qr" {} ''
+    cp ${oiapp} $out
+    chmod +x $out
+  '';
+  wyzwUrl = "https://wyzwania.programuj.edu.pl";
+in
 {
   home-manager.useGlobalPkgs = true;
   # For lib.hm
-  home-manager.users.user = {lib, ...}:
-  # Dorzucamy aplikacje oi do offline submitow
-  let
-    oiapp = pkgs.fetchurl {
-      url = "https://kuraczyk.net/sio2qr";
-      sha256 = "sha256-tymL8dELgtWeA1ooUoQ7/bIOvvwBUygUkUzeqUhxpi4=";
-    };
-    sio2qr = pkgs.runCommand "sio2qr" {} ''
-      cp ${oiapp} $out
-      chmod +x $out
-    '';
-  in
-  {
+  home-manager.users.user = {lib, ...}: {
     # Lista zmienionych rzeczy:
     # geany: xterm --> xfce4-term; colorscheme'y; -std=c++17 przy kompilacji.
     home.activation.copyGeanyConfig = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
@@ -23,7 +22,11 @@
         -f ${./skel.tar}
     '';
 
-    # alias zamiast sciezki do executable
+    xdg.configFile."xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml" = {
+      source = ''${./xfce4-panel.xml}'';
+      force = true;
+    };
+
     programs.bash.enable = true;
     programs.bash.shellAliases = {
       sio2qr = "${sio2qr}";
@@ -34,21 +37,47 @@
       enable = true;
       profiles.default = {
         id = 0;
-        name = "Talentnix OI firefox profile";
+        name = "Talentnix firefox profile";
         # This will delete all previous bookmarks. Unfortunate.
         bookmarks.force = true;
         bookmarks.settings = [{
           toolbar = true;
           bookmarks = [
             {
-              name = "SIO2 - Olimpiada Informatyczna";
+              name = "SIO2 MIMUW";
               url = "https://sio2.mimuw.edu.pl";
+            }
+            {
+              name = "OI IDE";
+              url = "https://ide.sio2.mimuw.edu.pl/";
+            }
+            {
+              name = "Wyzwania";
+              url = wyzwUrl;
             }
           ];
         }];
         search = {
           default = "ddg";
           force = true;
+        };
+        # TODO:
+        # - Don't show "Import bookmarks" in the bookmark bar.
+        # - Empty the initial shortcuts like youtube and wikipedia.
+        settings = {
+          # Disable the "Import bookmarks" and onboarding tour.
+          "browser.aboutwelcome.enabled" = false;
+          "browser.messaging-system.whatsNewPanel.enabled" = false;
+
+          # Disable the "Privacy Notice" and data collection prompts.
+          "datareporting.policy.dataSubmissionEnabled" = false;
+          "datareporting.healthreport.uploadEnabled" = false;
+          "browser.discovery.enabled" = false;
+
+          # Clean up the new tab page (shortcuts, pocket, etc.).
+          "browser.newtabpage.activity-stream.showSponsored" = false;
+          "browser.newtabpage.activity-stream.showSponsoredTopSites" = false;
+          "browser.newtabpage.activity-stream.feeds.section.topstories" = false;
         };
       };
     };
@@ -72,8 +101,8 @@
         "extensions.autoUpdate" = false;
         "extensions.autoCheckUpdates" = false;
         "extensions.ignoreRecommendations" = true;
-
-        "github.copilot.enable" = false;
+        "files.autoSave" = "onFocusChange";
+        "chat.disableAIFeatures" = true;
 
         "C_Cpp.default.cppStandard" = "c++23";
         "C_Cpp.default.cStandard" = "c17";
