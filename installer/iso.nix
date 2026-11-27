@@ -58,12 +58,17 @@ in
         bash
         nixos-install-tools
         coreutils
-        findutils
-        parted
+        dosfstools
+        e2fsprogs
+        grub2
+        mkpasswd
+        systemd
+        util-linux
         stdenvNoCC
-      ];      
+      ];
       script = pkgs.replaceVars ./install {
         template = templatePath;
+        repartDefinitions = "${./repart.d}";
         this = thisPath;
         inherit nixpkgs partialSystem;
         hm = home-manager;

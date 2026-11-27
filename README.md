@@ -25,7 +25,13 @@ Steps:
 4. Follow the on-screen instructions
      - the hostname ought to be `talentop-XXX` where XXX is the code from a sticker
      - pay attention to the prompt about clearing the user's home
-     - enter the root password, which should be known among us (the technical staff)
+     - if prompted, enter the GRUB password and the Linux root password from the `talentopy/root-install` entry in TalentPass
+
+Installation requires a writable disk of at least 32 GiB and replaces its partition table. The installer uses `systemd-repart` to size `/`, `/home`, `/worker` and swap according to the disk capacity, with at least 24 GiB for `/`. The BIOS boot and EFI partitions have fixed sizes.
+
+The installer reads per-host settings from `/config/<MAC>` and the hostname from `/hostname/<MAC>` under the Flash base URL. The base is `https://flash.talent.edu.pl/talentnix` on `master` and `https://flash.talent.edu.pl/oinix` on `oi`.
+
+Serve a single-line `grub-mkpasswd-pbkdf2` hash at `/grubPass` under each base URL. If the hash is missing or invalid, the installer prompts for the GRUB password. The per-host configuration can supply `ROOT_PWD_FILE` as an HTTPS URL serving a single-line yescrypt or SHA-512 crypt hash. Set `SET_ROOT_PWD=true` to enter the Linux root password manually. The installer stores both hashes under `/var/lib/talentnix` on the installed system.
 
 ### Updating
 
