@@ -105,7 +105,7 @@ function try_ping() {
     ping -c 1 -W 2 $1 &>/dev/null
 }
 
-configs_server="https://flash.talent.edu.pl/talentnix"
+configs_server="https://flash.talent.edu.pl/oinix"
 
 internet_tries=1
 while ! try_ping 1.1.1.1 && ! try_ping 8.8.8.8; do
