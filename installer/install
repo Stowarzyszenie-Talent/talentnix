@@ -57,6 +57,11 @@ function hash_grub_password() {
 	printf '%s\n' "${output##* }"
 }
 
+function fetch_password_hash() {
+	[[ $1 == true && -n $2 ]] || return 1
+	curl --fail --silent --show-error --max-time 10 --proto '=https' -- "$2"
+}
+
 pick_result=""
 
 function pick() {
@@ -152,13 +157,11 @@ unset config_response
 
 wifiLock="${WIFI_LOCK:-}"
 clearHomeAlways="${CLEAR_HOME_ALWAYS:-}"
-rootPwdFile="${ROOT_PWD_FILE:-}"
 useEFI="${USE_EFI:-}"
-setRootPass="${SET_ROOT_PWD:-}"
 poweroffAfterInstall="${POWEROFF_AFTER_INSTALL:-}"
 
 grubHashPattern='^grub\.pbkdf2\.sha512\.[1-9][0-9]*\.([[:xdigit:]]{2})+\.[[:xdigit:]]{128}$'
-grubHash=$(curl --fail --silent --show-error --max-time 10 --proto '=https' "$configs_server/grubPass") || grubHash=""
+grubHash=$(fetch_password_hash "${SET_GRUB_PWD:-}" "${GRUB_PWD_FILE:-}") || grubHash=""
 if [[ ! $grubHash =~ $grubHashPattern ]]; then
 	grubPassword=$(read_password GRUB)
 	grubHash=$(hash_grub_password "$grubPassword") || abort "Unable to hash the GRUB password."
@@ -168,10 +171,7 @@ fi
 
 # Accept single-line yescrypt and SHA-512 crypt hashes from the configuration server.
 rootHashPattern='^(\$y\$[./A-Za-z0-9]+\$[./A-Za-z0-9]+\$[./A-Za-z0-9]{43}|\$6\$(rounds=[0-9]+\$)?[./A-Za-z0-9]{1,16}\$[./A-Za-z0-9]{86})$'
-rootHash=""
-if [[ $setRootPass != true && -n $rootPwdFile ]]; then
-	rootHash=$(curl --fail --silent --show-error --max-time 10 --proto '=https' "$rootPwdFile") || rootHash=""
-fi
+rootHash=$(fetch_password_hash "${SET_ROOT_PWD:-}" "${ROOT_PWD_FILE:-}") || rootHash=""
 if [[ ! $rootHash =~ $rootHashPattern ]]; then
 	rootPassword=$(read_password root)
 	rootHash=$(printf '%s\n' "$rootPassword" | mkpasswd --stdin --method=yescrypt) || abort "Unable to hash the root password."
@@ -207,7 +207,7 @@ check_install_disk "$install_device" || abort "The installation disk is unavaila
 install_mounts=$(findmnt -rno TARGET | awk '$0 == "/mnt" || index($0, "/mnt/") == 1')
 [[ -z $install_mounts ]] || abort "Unmount existing filesystems under /mnt before installing."
 log "Formatting $install_device with systemd-repart"
-systemd-repart --definitions="@repartDefinitions@" --empty=force --dry-run=no --seed=random "$install_device"
+systemd-repart --definitions="@repartDefinitions@" --empty=force --dry-run=no --discard=no --seed=random "$install_device"
 udevadm settle
 
 partitions=$(lsblk -nrpo PATH,PARTLABEL -- "$install_device")

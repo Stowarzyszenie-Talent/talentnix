@@ -31,7 +31,7 @@ Installation requires a writable disk of at least 32 GiB and replaces its partit
 
 The installer reads per-host settings from `/config/<MAC>` and the hostname from `/hostname/<MAC>` under the Flash base URL. The base is `https://flash.talent.edu.pl/talentnix` on `master` and `https://flash.talent.edu.pl/oinix` on `oi`.
 
-Serve a single-line `grub-mkpasswd-pbkdf2` hash at `/grubPass` under each base URL. If the hash is missing or invalid, the installer prompts for the GRUB password. The per-host configuration can supply `ROOT_PWD_FILE` as an HTTPS URL serving a single-line yescrypt or SHA-512 crypt hash. Set `SET_ROOT_PWD=true` to enter the Linux root password manually. The installer stores both hashes under `/var/lib/talentnix` on the installed system.
+To fetch password hashes automatically, set `SET_GRUB_PWD=true` with `GRUB_PWD_FILE`, and `SET_ROOT_PWD=true` with `ROOT_PWD_FILE`, in the per-host configuration. Both files must be served over HTTPS and contain one line. The GRUB file takes a `grub-mkpasswd-pbkdf2` hash, and the root file takes a yescrypt or SHA-512 crypt hash. The installer prompts for a password if automatic fetching is disabled, the URL is missing, the download fails, or the hash is invalid. Both hashes are stored under `/var/lib/talentnix` on the installed system.
 
 ### Updating
 
