@@ -36,7 +36,7 @@ function prompt() {
 function read_password() {
 	local password confirmation
 	while true; do
-		prompt "$1 password:"
+		prompt "${1^} password:"
 		IFS= read -rs password || abort "Unable to read $1 password."
 		echo >&2
 		prompt "Confirm $1 password:"
@@ -173,8 +173,7 @@ if [[ $setRootPass != true && -n $rootPwdFile ]]; then
 	rootHash=$(curl --fail --silent --show-error --max-time 10 --proto '=https' "$rootPwdFile") || rootHash=""
 fi
 if [[ ! $rootHash =~ $rootHashPattern ]]; then
-	log "Enter the root password stored in TalentPass (talentopy/root-install)."
-	rootPassword=$(read_password 'Linux root')
+	rootPassword=$(read_password root)
 	rootHash=$(printf '%s\n' "$rootPassword" | mkpasswd --stdin --method=yescrypt) || abort "Unable to hash the root password."
 	unset rootPassword
 	[[ $rootHash =~ $rootHashPattern ]] || abort "Invalid root password hash."
