@@ -33,6 +33,35 @@ function prompt() {
 	echo -n "[1;35m==> [0m$* " >/dev/stderr
 }
 
+function read_password() {
+	local password confirmation
+	while true; do
+		prompt "${1^} password:"
+		IFS= read -rs password || abort "Unable to read $1 password."
+		echo >/dev/stderr
+		prompt "Confirm $1 password:"
+		IFS= read -rs confirmation || abort "Unable to read $1 password confirmation."
+		echo >/dev/stderr
+		if [[ -n $password && $password == "$confirmation" ]]; then
+			printf '%s\n' "$password"
+			return
+		fi
+		warn "Enter a non-empty password that matches its confirmation."
+	done
+}
+
+function hash_grub_password() {
+	local output
+	output=$(printf '%s\n' "$1" "$1" | LC_ALL=C grub-mkpasswd-pbkdf2) || return 1
+	printf '%s\n' "${output##* }"
+}
+
+# Prints the hash served at URL $2 when fetching is enabled ($1 == true).
+function fetch_password_hash() {
+	[[ $1 == true && -n $2 ]] || return 1
+	curl --fail --silent --show-error --max-time 10 --proto '=https' -- "$2"
+}
+
 pick_result=""
 
 function pick() {
@@ -103,26 +132,31 @@ fi
 
 wifiLock="${WIFI_LOCK:-}"
 clearHomeAlways="${CLEAR_HOME_ALWAYS:-}"
-rootPwdFile="${ROOT_PWD_FILE:-}"
 useEFI="${USE_EFI:-}"
-setRootPass="${SET_ROOT_PWD:-}"
 poweroffAfterInstall="${POWEROFF_AFTER_INSTALL:-}"
 
-if [ "$rootPwdFile" != "" ]; then
-    if [ $(curl -s -o /dev/null -w "%{http_code}" "$rootPwdFile" || echo "000") -eq 200 ]; then
-		rm -rf /tmp/config
-		mkdir /tmp/config
-		curl -sS -o "/tmp/config/rootPassword" "$rootPwdFile"
-    else
-        warn "Unable to fetch root password file. Setting to default."
-        rootPwdFile=""
-    fi
-else
-    warn "Root password file was not found or not set. Setting to default."
+# GRUB: SET_GRUB_PWD=true + GRUB_PWD_FILE (single-line grub-mkpasswd-pbkdf2 hash), otherwise prompt.
+grubHashPattern='^grub\.pbkdf2\.sha512\.[1-9][0-9]*\.([[:xdigit:]]{2})+\.[[:xdigit:]]{128}$'
+grubHash=$(fetch_password_hash "${SET_GRUB_PWD:-}" "${GRUB_PWD_FILE:-}") || grubHash=""
+if [[ ! $grubHash =~ $grubHashPattern ]]; then
+	grubPassword=$(read_password GRUB)
+	grubHash=$(hash_grub_password "$grubPassword") || abort "Unable to hash the GRUB password."
+	unset grubPassword
+	[[ $grubHash =~ $grubHashPattern ]] || abort "Invalid GRUB password hash."
 fi
 
-# TODO: read from /install/size??
-min_size_gibibytes=300;
+# Root: SET_ROOT_PWD=true + ROOT_PWD_FILE (single-line yescrypt or SHA-512 crypt hash), otherwise prompt.
+rootHashPattern='^(\$y\$[./A-Za-z0-9]+\$[./A-Za-z0-9]+\$[./A-Za-z0-9]{43}|\$6\$(rounds=[0-9]+\$)?[./A-Za-z0-9]{1,16}\$[./A-Za-z0-9]{86})$'
+rootHash=$(fetch_password_hash "${SET_ROOT_PWD:-}" "${ROOT_PWD_FILE:-}") || rootHash=""
+if [[ ! $rootHash =~ $rootHashPattern ]]; then
+	rootPassword=$(read_password root)
+	rootHash=$(printf '%s\n' "$rootPassword" | mkpasswd --stdin --method=yescrypt) || abort "Unable to hash the root password."
+	unset rootPassword
+	[[ $rootHash =~ $rootHashPattern ]] || abort "Invalid root password hash."
+fi
+
+# Smallest disk the repart.d definitions fit on.
+min_size_gibibytes=32;
 min_size_bytes="$((min_size_gibibytes*1024*1024*1024))"
 
 if [ $(lsblk -d -n -o NAME | grep -E "^(nvme|sd|vd)" | wc -l) -eq 1 ] &&
@@ -145,10 +179,10 @@ else
 		prompt "Installation device path:"
 		read -r install_device
 
-		if [[ -b $install_device ]]; then
+		if [[ -b $install_device && $(lsblk -dno TYPE -- "$install_device") == disk ]]; then
 			break
 		else
-			err "$install_device is not a block device"
+			err "$install_device is not a whole disk"
 		fi
 	done
 fi
@@ -170,22 +204,16 @@ log "Unmounting partitions"
 umount -Rq /mnt || true
 swapoff -a
 
-log "Formatting device"
+log "Formatting $install_device with systemd-repart"
 
-parted -s "$install_device" -- mklabel gpt
-parted -s "$install_device" -- mkpart primary 1MiB 2MiB
-parted -s "$install_device" set 1 bios_grub on
-parted -s "$install_device" -- mkpart ESP fat32 2MiB 1GiB
-mkfs.fat -I -F32 -n EFI "${partition_efi}"
-parted -s "$install_device" -- set 2 esp on
-parted -s "$install_device" -- mkpart primary ext4 1GiB 129GiB
-mkfs.ext4 -q -F -L talentnix-root "${partition_root}"
-parted -s "$install_device" -- mkpart primary ext4 129GiB 193GiB
-mkfs.ext4 -q -F -L talentnix-home "${partition_home}"
-parted -s "$install_device" -- mkpart primary ext4 193GiB 257GiB
-mkfs.ext4 -q -F -L talentnix-worker "${partition_workers}"
-parted -s "$install_device" -- mkpart primary linux-swap -32GiB 100%
-mkswap -q -f -L talentnix-swap "${partition_swap}"
+# Partitions are created and numbered in the order of the repart.d files (10-bios ... 60-swap),
+# so they match the partition_* paths above.
+systemd-repart --definitions="@repartDefinitions@" --empty=force --dry-run=no --discard=no --seed=random "$install_device"
+udevadm settle
+
+for partition in "$partition_bios_grub" "$partition_efi" "$partition_root" "$partition_home" "$partition_workers" "$partition_swap"; do
+	[[ -b $partition ]] || abort "Partition $partition was not created."
+done
 
 log "Generating default configuration"
 
@@ -234,10 +262,14 @@ sed -i "s,&wifiLock&,$wifiLock,g" /mnt/etc/nixos/flake.nix
 sed -i "s,&install_device&,$install_device,g" /mnt/etc/nixos/flake.nix
 sed -i "s,&_stateVersion&,@stateVersion@,g" /mnt/etc/nixos/flake.nix
 
-if [ "$rootPwdFile" != "" ]; then
-	rm -rf /mnt/etc/nixos/rootPassword
-	cp /tmp/config/rootPassword /mnt/etc/nixos/rootPassword
-fi
+# The template reads both hashes from /var/lib/talentnix (hashedPasswordFile).
+install -d -m 0700 /mnt/var/lib/talentnix
+(
+	umask 077
+	printf '%s\n' "$grubHash" > /mnt/var/lib/talentnix/grubPassword
+	printf '%s\n' "$rootHash" > /mnt/var/lib/talentnix/rootPassword
+)
+unset grubHash rootHash
 
 nixos-generate-config --root /mnt --show-hardware-config > /mnt/etc/nixos/hardware-configuration.nix
 
@@ -248,16 +280,6 @@ if [ "$clearHomeAlways" == "" ]; then
 fi
 if [ "$clearHomeAlways" == "true" ]; then
     touch /mnt/etc/clear_home_always
-fi
-
-rootPassFlag="--no-root-password"
-if [ "$setRootPass" == "" ]; then
-	prompt "Set root password? [y/N]"
-    pick y N
-    [[ $pick_result == y ]] && setRootPass="true"
-fi
-if [ "$setRootPass" == "true" ]; then
-  	rootPassFlag=""
 fi
 
 if [ "$poweroffAfterInstall" == "" ]; then
@@ -276,7 +298,7 @@ nix copy --offline --no-require-sigs --to /mnt @this@ @nixpkgs@ @hm@ @partialSys
         --override-input home-manager @hm@
 )
 
-nixos-install --no-channel-copy $rootPassFlag --flake /mnt/etc/nixos#"$hostname"
+nixos-install --no-channel-copy --no-root-password --flake /mnt/etc/nixos#"$hostname"
 
 if [ "$poweroffAfterInstall" == "true" ]; then
     poweroff
