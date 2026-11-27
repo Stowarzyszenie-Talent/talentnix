@@ -4,19 +4,19 @@ set -euo pipefail
 IFS=$'\t\n'
 
 function err() {
-	echo "[31merror[0m: $*" >&2
+	echo "[31merror[0m: $*" >/dev/stderr
 }
 
 function warn() {
-	echo "[33mwarn[0m: $*" >&2
+	echo "[33mwarn[0m: $*" >/dev/stderr
 }
 
 function log() {
-	echo "[36minfo[0m: $*" >&2
+	echo "[36minfo[0m: $*" >/dev/stderr
 }
 
 function debug() {
-	echo "[34mdebug[0m: $*" >&2
+	echo "[34mdebug[0m: $*" >/dev/stderr
 }
 
 function dbg() {
@@ -30,7 +30,7 @@ function abort() {
 }
 
 function prompt() {
-	echo -n "[1;35m==> [0m$* " >&2
+	echo -n "[1;35m==> [0m$* " >/dev/stderr
 }
 
 function read_password() {
@@ -38,10 +38,10 @@ function read_password() {
 	while true; do
 		prompt "${1^} password:"
 		IFS= read -rs password || abort "Unable to read $1 password."
-		echo >&2
+		echo >/dev/stderr
 		prompt "Confirm $1 password:"
 		IFS= read -rs confirmation || abort "Unable to read $1 password confirmation."
-		echo >&2
+		echo >/dev/stderr
 		if [[ -n $password && $password == "$confirmation" ]]; then
 			printf '%s\n' "$password"
 			return
@@ -51,12 +51,12 @@ function read_password() {
 }
 
 function hash_grub_password() {
-	local password=$1
 	local output
-	output=$(printf '%s\n' "$password" "$password" | LC_ALL=C grub-mkpasswd-pbkdf2) || return 1
+	output=$(printf '%s\n' "$1" "$1" | LC_ALL=C grub-mkpasswd-pbkdf2) || return 1
 	printf '%s\n' "${output##* }"
 }
 
+# Prints the hash served at URL $2 when fetching is enabled ($1 == true).
 function fetch_password_hash() {
 	[[ $1 == true && -n $2 ]] || return 1
 	curl --fail --silent --show-error --max-time 10 --proto '=https' -- "$2"
@@ -88,39 +88,17 @@ if [[ $(id -u) -ne 0 ]]; then
 	exec sudo "${BASH_SOURCE[0]}" || exit 1
 fi
 
-function check_install_disk() {
-	local device=$1 details type size read_only mounts
-	if [[ ! -b $device ]] || ! details=$(lsblk -bdnro TYPE,SIZE,RO -- "$device"); then
-		err "Cannot inspect block device: $device"
-		return 1
-	fi
-	IFS=' ' read -r type size read_only <<< "$details"
-	if [[ $type != disk || $read_only != 0 ]]; then
-		err "$device must be a writable whole disk."
-		return 1
-	fi
-	if [[ ! $size =~ ^[0-9]+$ ]] || (( size < 32 * 1024 ** 3 )); then
-		err "$device must be at least 32 GiB."
-		return 1
-	fi
-	if ! mounts=$(lsblk -nro MOUNTPOINTS -- "$device" | awk 'NF') || [[ -n $mounts ]]; then
-		err "$device must have no mounted filesystems or active swap."
-		return 1
-	fi
-}
+function print_devices() {
+	found=()
+	while read -rd $'\0' path; do
+		found+=("$path")
+	done < <(find /dev/ -regex "$2" -print0)
 
-function partition_path() {
-	local path
-	path=$(awk -v label="$1" '$2 == label { print $1 }' <<< "$partitions")
-	[[ -b $path ]] || abort "Cannot find partition $1 on $install_device."
-	printf '%s\n' "$path"
-}
-
-function cleanup_install_mounts() {
-	if [[ $swap_active == true ]]; then
-		swapoff "$partition_swap" || true
+	if [[ ${#found[@]} -gt 0 ]]; then
+		IFS=' '
+		log "$1: ${found[*]}"
+		IFS=$'\t\n'
 	fi
-	umount -Rq /mnt || true
 }
 
 function try_ping() {
@@ -146,20 +124,18 @@ mac=$(ip link show | grep -A1 "^[0-9].*state UP" | grep -v "lo\|wlan\|wlp\|ww" |
 get_hostname="$configs_server/hostname/$mac"
 get_config="$configs_server/config/$mac"
 
-status_config=000
-if config_response=$(curl --fail --silent --show-error --max-time 10 --write-out $'\n%{http_code}' "$get_config"); then
-	status_config=${config_response##*$'\n'}
-	if [[ $status_config == 200 ]]; then
-		source <(printf '%s\n' "${config_response%$'\n'*}")
-	fi
+status_config=$(curl -s -o /dev/null -w "%{http_code}" "$get_config" || echo "000")
+
+if [ "$status_config" -eq 200 ]; then
+	source <(curl -sS "$get_config")
 fi
-unset config_response
 
 wifiLock="${WIFI_LOCK:-}"
 clearHomeAlways="${CLEAR_HOME_ALWAYS:-}"
 useEFI="${USE_EFI:-}"
 poweroffAfterInstall="${POWEROFF_AFTER_INSTALL:-}"
 
+# GRUB: SET_GRUB_PWD=true + GRUB_PWD_FILE (single-line grub-mkpasswd-pbkdf2 hash), otherwise prompt.
 grubHashPattern='^grub\.pbkdf2\.sha512\.[1-9][0-9]*\.([[:xdigit:]]{2})+\.[[:xdigit:]]{128}$'
 grubHash=$(fetch_password_hash "${SET_GRUB_PWD:-}" "${GRUB_PWD_FILE:-}") || grubHash=""
 if [[ ! $grubHash =~ $grubHashPattern ]]; then
@@ -169,7 +145,7 @@ if [[ ! $grubHash =~ $grubHashPattern ]]; then
 	[[ $grubHash =~ $grubHashPattern ]] || abort "Invalid GRUB password hash."
 fi
 
-# Accept single-line yescrypt and SHA-512 crypt hashes from the configuration server.
+# Root: SET_ROOT_PWD=true + ROOT_PWD_FILE (single-line yescrypt or SHA-512 crypt hash), otherwise prompt.
 rootHashPattern='^(\$y\$[./A-Za-z0-9]+\$[./A-Za-z0-9]+\$[./A-Za-z0-9]{43}|\$6\$(rounds=[0-9]+\$)?[./A-Za-z0-9]{1,16}\$[./A-Za-z0-9]{86})$'
 rootHash=$(fetch_password_hash "${SET_ROOT_PWD:-}" "${ROOT_PWD_FILE:-}") || rootHash=""
 if [[ ! $rootHash =~ $rootHashPattern ]]; then
@@ -179,43 +155,65 @@ if [[ ! $rootHash =~ $rootHashPattern ]]; then
 	[[ $rootHash =~ $rootHashPattern ]] || abort "Invalid root password hash."
 fi
 
-disk_list=$(lsblk -dnrpo PATH,TYPE | awk '$2 == "disk" { print $1 }')
-mapfile -t disks <<< "$disk_list"
+# Smallest disk the repart.d definitions fit on.
+min_size_gibibytes=32;
+min_size_bytes="$((min_size_gibibytes*1024*1024*1024))"
 
-if [[ ${#disks[@]} -eq 1 ]] && check_install_disk "${disks[0]}" 2>/dev/null; then
-	install_device=${disks[0]}
-	if [[ $status_config != 200 ]]; then
-		prompt "Erase $install_device and install TalentNix? [y/N]"
-		pick y N
-		[[ $pick_result == y ]] || exit 0
-	fi
+if [ $(lsblk -d -n -o NAME | grep -E "^(nvme|sd|vd)" | wc -l) -eq 1 ] &&
+   [ $(lsblk -d -n -b -o NAME,SIZE | grep -E "^(nvme|sd|vd)" | awk -v min="$min_size_bytes" '$2 >= min {count++} END {print count+0}') -eq 1 ]; then
+	if [ "$status_config" != "200" ]; then
+		prompt "Do you want to install talentnix? (IT WILL WIPE YOUR DRIVE!!!) [y/N]"
+        pick y N
+		[[ $pick_result != y ]] && exit 0
+    fi
+    read -r install_device <<< "/dev/$(lsblk -d -n -o NAME | grep -E "^(nvme|sd|vd)")"
 else
 	log "Available devices:"
-	lsblk -d -o PATH,SIZE,TYPE
+	lsblk -d -o NAME,SIZE
+	echo
+	print_devices "sd" "/dev/sd[a-Z]+"
+	print_devices "vd" "/dev/vd[a-Z]+"
+	print_devices "nvme" "/dev/nvme[0-9]+n[0-9]+"
 
 	while true; do
-		prompt "Device path to erase and install TalentNix on:"
-		read -r device_path || abort "No installation disk selected."
-		if check_install_disk "$device_path"; then
-			install_device=$(readlink -f -- "$device_path")
+		prompt "Installation device path:"
+		read -r install_device
+
+		if [[ -b $install_device && $(lsblk -dno TYPE -- "$install_device") == disk ]]; then
 			break
+		else
+			err "$install_device is not a whole disk"
 		fi
 	done
 fi
 
-check_install_disk "$install_device" || abort "The installation disk is unavailable."
-install_mounts=$(findmnt -rno TARGET | awk '$0 == "/mnt" || index($0, "/mnt/") == 1')
-[[ -z $install_mounts ]] || abort "Unmount existing filesystems under /mnt before installing."
+if [[ $install_device =~ ^/dev/nvme[0-9]+n[0-9]+$ ]]; then
+	install_device_part_prefix="${install_device}p"
+else
+	install_device_part_prefix="${install_device}"
+fi
+
+partition_bios_grub="${install_device_part_prefix}1"
+partition_efi="${install_device_part_prefix}2"
+partition_root="${install_device_part_prefix}3"
+partition_home="${install_device_part_prefix}4"
+partition_workers="${install_device_part_prefix}5"
+partition_swap="${install_device_part_prefix}6"
+
+log "Unmounting partitions"
+umount -Rq /mnt || true
+swapoff -a
+
 log "Formatting $install_device with systemd-repart"
+
+# Partitions are created and numbered in the order of the repart.d files (10-bios ... 60-swap),
+# so they match the partition_* paths above.
 systemd-repart --definitions="@repartDefinitions@" --empty=force --dry-run=no --discard=no --seed=random "$install_device"
 udevadm settle
 
-partitions=$(lsblk -nrpo PATH,PARTLABEL -- "$install_device")
-partition_efi=$(partition_path EFI)
-partition_root=$(partition_path talentnix-root)
-partition_home=$(partition_path talentnix-home)
-partition_workers=$(partition_path talentnix-worker)
-partition_swap=$(partition_path talentnix-swap)
+for partition in "$partition_bios_grub" "$partition_efi" "$partition_root" "$partition_home" "$partition_workers" "$partition_swap"; do
+	[[ -b $partition ]] || abort "Partition $partition was not created."
+done
 
 log "Generating default configuration"
 
@@ -242,10 +240,7 @@ mkdir /tmp/installer
 cd /tmp/installer
 
 mount -o noatime "${partition_root}" /mnt
-swap_active=false
-trap cleanup_install_mounts EXIT
 swapon "${partition_swap}"
-swap_active=true
 mount -o noatime -m "${partition_home}" /mnt/home
 mount -o noatime -m "${partition_workers}" /mnt/worker
 
@@ -267,6 +262,7 @@ sed -i "s,&wifiLock&,$wifiLock,g" /mnt/etc/nixos/flake.nix
 sed -i "s,&install_device&,$install_device,g" /mnt/etc/nixos/flake.nix
 sed -i "s,&_stateVersion&,@stateVersion@,g" /mnt/etc/nixos/flake.nix
 
+# The template reads both hashes from /var/lib/talentnix (hashedPasswordFile).
 install -d -m 0700 /mnt/var/lib/talentnix
 (
 	umask 077
